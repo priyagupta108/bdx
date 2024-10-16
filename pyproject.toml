@@ -1,0 +1,79 @@
+[project]
+name = "bdx"
+version = "0.0.1"
+authors = [
+  { name="Michał Krzywkowski", email="k.michal@zoho.com" },
+]
+description = "Indexer for binary files"
+readme = "README.md"
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+    "Development Status :: 3 - Alpha",
+    "Operating System :: OS Independent",
+    "Topic :: Database",
+    "Topic :: Software Development",
+]
+dependencies = [
+    "click",
+    "pyelftools",
+    "tqdm",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff",
+    "mypy",
+    "black",
+    "isort",
+    "pyright",
+]
+
+[project.urls]
+Homepage = "https://github.com/mkcms/bdx"
+
+[project.scripts]
+bdx = "bdx.cli:cli"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.ruff]
+line-length = 79
+
+[tool.ruff.lint]
+select = [
+    "E",
+    "F",
+    "B",
+    "D",
+    "I",
+    "PLE",
+    "PLW",
+    "PLC",
+    "N",
+]
+
+ignore = [
+    "D104",  # undocumented-public-package
+    "D100",  # undocumented-public-module
+    "D105",  # undocumented-magic-method
+]
+
+unfixable = [
+    "B",
+]
+
+[tool.mypy]
+check_untyped_defs = true
+ignore_missing_imports = true
+
+[tool.black]
+line-length = 79
+
+# Local Variables:
+# indent-tabs-mode: nil
+# End:
