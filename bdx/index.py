@@ -177,9 +177,6 @@ class SymbolIndex:
     class ModifiedError(Error):
         """SymbolIndex was modified and should be reopened."""
 
-    class QueryParserError(Error):
-        """Error in the query."""
-
     def __init__(
         self,
         path: Path,
@@ -403,33 +400,14 @@ class SymbolIndex:
         return db
 
     def _parse_query(self, query: str) -> xapian.Query:
-        if query == "*:*":
-            return xapian.Query.MatchAll  # pyright: ignore
+        from bdx.query_parser import QueryParser
 
-        parser = xapian.QueryParser()
-        parser.set_default_op(xapian.Query.OP_AND)
-        parser.set_database(self._live_db())
-
-        for schema_field in self.schema.values():
-            if isinstance(schema_field, IntegerField):
-                vrp = xapian.NumberValueRangeProcessor(
-                    schema_field.slot, schema_field.name + ":", True
-                )
-                parser.add_valuerangeprocessor(vrp)
-            elif schema_field.boolean:
-                parser.add_boolean_prefix(
-                    schema_field.name, schema_field.prefix
-                )
-            else:
-                parser.add_prefix(schema_field.name, schema_field.prefix)
-
-        try:
-            parsed_query = parser.parse_query(
-                query, parser.FLAG_DEFAULT | parser.FLAG_WILDCARD
-            )
-        except xapian.QueryParserError as e:
-            raise SymbolIndex.QueryParserError(e) from e
-        return parsed_query
+        query_parser = QueryParser(
+            SymbolIndex.SCHEMA,
+            default_fields=["name"],
+            wildcard_field="name",
+        )
+        return query_parser.parse_query(query)
 
 
 @dataclass

@@ -8,6 +8,7 @@ import click
 
 from bdx.binary import Symbol
 from bdx.index import SymbolIndex, index_binary_directory, search_index
+from bdx.query_parser import QueryParser
 
 
 def _common_options(index_must_exist=False):
@@ -192,7 +193,7 @@ def search(_directory, index_path, query, num, format):
             limit=num,
             consumer=callback,
         )
-    except SymbolIndex.QueryParserError as e:
+    except QueryParser.Error as e:
         click.echo(f"Invalid query: {str(e)}")
         exit(1)
 
