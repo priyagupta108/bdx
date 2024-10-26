@@ -1,10 +1,10 @@
 PYTHON ?= python3
 
 black:
-	${PYTHON} -m black bdx/
+	${PYTHON} -m black bdx/ tests/
 
 isort:
-	${PYTHON} -m isort -i bdx/*.py
+	${PYTHON} -m isort -i bdx/*.py tests/*.py
 
 format: black isort
 
@@ -16,4 +16,9 @@ ruff:
 
 lint: ruff mypy
 
-.PHONY: black isort format mypy ruff lint
+pytest:
+	${PYTHON} -m pytest
+
+check: pytest
+
+.PHONY: black isort format mypy ruff lint pytest check
