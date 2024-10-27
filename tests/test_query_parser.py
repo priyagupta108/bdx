@@ -1,12 +1,15 @@
 import pytest
 import xapian
-from bdx.index import DatabaseField, Schema
+from bdx.index import DatabaseField, IntegerField, Schema
 from bdx.query_parser import Op, QueryParser
 from pytest import fixture
 
 AND = Op.And.value
 OR = Op.Or.value
 WILDCARD = Op.Wildcard.value
+VALUE_RANGE = Op.ValueRange.value
+VALUE_GE = Op.ValueGe.value
+VALUE_LE = Op.ValueLe.value
 MATCH_ALL = xapian.Query.MatchAll  # pyright: ignore
 
 
@@ -98,6 +101,73 @@ def test_wildcard(query_parser):
         "XNAMEfoo.b",
         0,
         xapian.Query.WILDCARD_LIMIT_FIRST,
+    )
+
+
+def test_intrange(query_parser):
+    slot = 99928
+    query_parser.schema = schema = Schema(
+        [
+            IntegerField("value", "XV", slot=slot),
+        ]
+    )
+    query_parser.default_fields = ["value"]
+
+    assert query_parser.parse_query("123..456") == (
+        VALUE_RANGE,
+        slot,
+        schema["value"].preprocess_value(123),
+        schema["value"].preprocess_value(456),
+    )
+    assert query_parser.parse_query("..987") == (
+        VALUE_LE,
+        slot,
+        schema["value"].preprocess_value(987),
+    )
+    assert query_parser.parse_query("369..") == (
+        VALUE_GE,
+        slot,
+        schema["value"].preprocess_value(369),
+    )
+    assert query_parser.parse_query("369") == (
+        VALUE_RANGE,
+        slot,
+        schema["value"].preprocess_value(369),
+        schema["value"].preprocess_value(369),
+    )
+
+    query_parser.schema = schema = Schema(
+        [
+            IntegerField("value", "XV", slot=slot),
+            IntegerField("other_value", "XV2", slot=slot + 1),
+        ]
+    )
+
+    assert query_parser.parse_query("value:..12346") == (
+        VALUE_LE,
+        slot,
+        schema["value"].preprocess_value(12346),
+    )
+    assert query_parser.parse_query("value:99182") == (
+        VALUE_RANGE,
+        slot,
+        schema["value"].preprocess_value(99182),
+        schema["value"].preprocess_value(99182),
+    )
+    assert query_parser.parse_query("val:..12346") == ()
+
+    assert query_parser.parse_query("value:..12346 AND other_value:10..") == (
+        AND,
+        (
+            VALUE_LE,
+            slot,
+            schema["value"].preprocess_value(12346),
+        ),
+        (
+            VALUE_GE,
+            slot + 1,
+            schema["other_value"].preprocess_value(10),
+        ),
     )
 
 
