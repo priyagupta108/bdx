@@ -25,8 +25,6 @@ class DatabaseField:
 
     name: str
     prefix: str
-    boolean: bool = False
-    search_only: bool = False
     lowercase: bool = True
 
     def index(self, document: xapian.Document, value: Any):
@@ -50,7 +48,7 @@ class DatabaseField:
             value = str(value)
         if isinstance(value, str):
             value = value.encode()
-        if self.lowercase and not self.boolean:
+        if self.lowercase:
             value = value.lower()
         return value
 
@@ -62,10 +60,10 @@ class DatabaseField:
             wildcard: If true, make a wildcard query.
 
         """
-        if self.boolean or not self.lowercase:
-            term = f"{self.prefix}{value}"
-        else:
+        if self.lowercase:
             term = f"{self.prefix}{value.lower()}"
+        else:
+            term = f"{self.prefix}{value}"
         if wildcard:
             return xapian.Query(
                 xapian.Query.OP_WILDCARD,
@@ -405,7 +403,7 @@ class SymbolIndex:
         serialized_document, fields = pickle.loads(serialized_document)
 
         document = xapian.Document.unserialise(serialized_document)
-        self._set_document_data(document, fields)
+        document.set_data(pickle.dumps(fields))
         db.add_document(document)
 
     def delete_file(self, file: Path):
@@ -449,15 +447,6 @@ class SymbolIndex:
                 yield Symbol(**data)
         except xapian.DatabaseModifiedError as e:
             raise SymbolIndex.ModifiedError from e
-
-    def _set_document_data(self, document: xapian.Document, fields):
-        """Set document data, omitting search_only fields."""
-        for schema_field in self._schema.fields:
-            name = schema_field.name
-            if name in fields and schema_field.search_only:
-                del fields[name]
-
-        document.set_data(pickle.dumps(fields))
 
     def _live_db(self) -> xapian.Database | xapian.WritableDatabase:
         if self._db is None:

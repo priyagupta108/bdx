@@ -190,11 +190,11 @@ def test_wildcard_with_no_wildcard_field(query_parser):
     )
 
 
-def test_case_conversion_for_nonboolean_fields(query_parser):
+def test_case_conversion(query_parser):
     query_parser.schema = Schema(
         [
-            DatabaseField("name", "XNAME", boolean=False),
-            DatabaseField("path", "XPATH", boolean=True),
+            DatabaseField("name", "XNAME", lowercase=True),
+            DatabaseField("path", "XPATH", lowercase=False),
         ]
     )
 
