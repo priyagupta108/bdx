@@ -34,20 +34,9 @@ class Token(Enum):
             (Token.String, re.compile(r'"([^"]+)"')),
             (Token.Field, re.compile(r"([a-zA-Z_]+):")),
             (Token.Wildcard, re.compile(r"([a-zA-Z_][a-zA-Z0-9_.]*)[*]")),
-            (Token.Intrange, re.compile("([0-9]+)?[.][.]([0-9]+)?|([0-9]+)")),
+            (Token.Intrange, re.compile(r"(([0-9]+)?\.\.([0-9]+)?|([0-9]+))")),
             (Token.Term, re.compile(r"([a-zA-Z_][a-zA-Z0-9_.]*)")),
         ]
-
-
-class Op(Enum):
-    """Enum of all recogznied operators."""
-
-    And = xapian.Query.OP_AND
-    Or = xapian.Query.OP_OR
-    Wildcard = xapian.Query.OP_WILDCARD
-    ValueRange = xapian.Query.OP_VALUE_RANGE
-    ValueGe = xapian.Query.OP_VALUE_GE
-    ValueLe = xapian.Query.OP_VALUE_LE
 
 
 _MATCH_ALL = xapian.Query.MatchAll  # pyright: ignore
@@ -108,7 +97,7 @@ class QueryParser:
         self.wildcard_field = wildcard_field
         self._query = ""
         self._token: Optional[Token] = None
-        self._match_groups: tuple[str, ...] = ()
+        self._value: str = ""
         self._pos: int = 0
         self._parsed = None
         self._empty = xapian.Query()
@@ -152,7 +141,10 @@ class QueryParser:
                         return
 
                     self._token = token
-                    self._match_groups = match.groups()
+                    if match.groups():
+                        self._value = match.group(1)
+                    else:
+                        self._value = ""
                     return
 
             if self.ignore_unknown_tokens:
@@ -180,7 +172,7 @@ class QueryParser:
                 raise QueryParser.Error(msg)
             rhs = self._parsed
             if lhs != self._empty and rhs != self._empty:
-                self._parsed = xapian.Query(Op.Or.value, lhs, rhs)
+                self._parsed = xapian.Query(xapian.Query.OP_OR, lhs, rhs)
             elif lhs != self._empty:
                 self._parsed = lhs
             elif rhs != self._empty:
@@ -208,7 +200,7 @@ class QueryParser:
             if lhs is None:
                 self._parsed = rhs
             else:
-                self._parsed = xapian.Query(Op.And.value, lhs, rhs)
+                self._parsed = xapian.Query(xapian.Query.OP_AND, lhs, rhs)
         else:
             self._parsed = lhs
 
@@ -235,7 +227,7 @@ class QueryParser:
         elif self._token == Token.Intrange:
             retval = self._parse_intrange()
         elif self._token == Token.Field:
-            field = self._match_groups[0]
+            field = self._value
             self._parse_field()
 
             is_known_field = field in self.schema
@@ -271,24 +263,14 @@ class QueryParser:
 
     def _parse_term(self):
         self._expect(Token.Term, "term")
-        value = self._match_groups[0]
+        value = self._value
         subqueries = []
         for field in self.default_fields:
-            schema_field = self.schema[field]
-            prefix = schema_field.prefix
-            if schema_field.boolean or not schema_field.lowercase:
-                term = f"{prefix}{value}"
-            else:
-                term = f"{prefix}{value.lower()}"
-            subquery = xapian.Query(term)
+            subquery = self.schema[field].make_query(value)
             subqueries.append(subquery)
 
         self._next_token()
-        if len(subqueries) == 1:
-            query = subqueries[0]
-        else:
-            query = xapian.Query(Op.Or.value, subqueries)
-        self._parsed = query
+        self._parsed = self._merge_queries(subqueries)
         return True
 
     def _parse_wildcard(self):
@@ -298,16 +280,9 @@ class QueryParser:
             self._next_token()
             return True
 
-        value = self._match_groups[0]
+        value = self._value
         field = self.schema[self.wildcard_field]
-        prefix = field.prefix
-        if field.boolean or not field.lowercase:
-            term = f"{prefix}{value}"
-        else:
-            term = f"{prefix}{value.lower()}"
-        query = xapian.Query(
-            Op.Wildcard.value, term, 0, xapian.Query.WILDCARD_LIMIT_FIRST
-        )
+        query = field.make_query(value, wildcard=True)
 
         self._next_token()
         self._parsed = query
@@ -321,33 +296,23 @@ class QueryParser:
             schema_field = self.schema[field]
             if not isinstance(schema_field, IntegerField):
                 continue
-            subquery = self._make_value_range_query(schema_field)
+            subquery = schema_field.make_query(self._value)
             subqueries.append(subquery)
 
         self._next_token()
-        if len(subqueries) == 1:
-            query = subqueries[0]
-        else:
-            query = xapian.Query(Op.Or.value, subqueries)
-        self._parsed = query
+        self._parsed = self._merge_queries(subqueries)
         return True
 
     def _parse_string(self):
         self._expect(Token.String, "string")
-        value = self._match_groups[0]
+        value = self._value
         subqueries = []
         for field in self.default_fields:
-            prefix = self.schema[field].prefix
-            term = f"{prefix}{value}"
-            subquery = xapian.Query(term)
+            subquery = self.schema[field].make_query(value)
             subqueries.append(subquery)
 
         self._next_token()
-        if len(subqueries) == 1:
-            query = subqueries[0]
-        else:
-            query = xapian.Query(Op.Or.value, subqueries)
-        self._parsed = query
+        self._parsed = self._merge_queries(subqueries)
         return True
 
     def _parse_field(self):
@@ -364,60 +329,20 @@ class QueryParser:
         if self._token == Token.Intrange and isinstance(
             schema_field, IntegerField
         ):
-            self._parsed = self._make_value_range_query(schema_field)
+            self._parsed = schema_field.make_query(self._value)
         else:
-            field_prefix = schema_field.prefix
-            if schema_field.boolean or not schema_field.lowercase:
-                term = self._match_groups[0]
-            else:
-                term = self._match_groups[0].lower()
-
-            term_with_prefix = f"{field_prefix}{term}"
-
-            if self._token == Token.Wildcard:
-                self._parsed = xapian.Query(
-                    Op.Wildcard.value,
-                    term_with_prefix,
-                    0,
-                    xapian.Query.WILDCARD_LIMIT_FIRST,
-                )
-            else:
-                self._parsed = xapian.Query(term_with_prefix)
+            self._parsed = schema_field.make_query(
+                self._value, wildcard=self._token == Token.Wildcard
+            )
 
         self._next_token()
         return True
 
-    def _make_value_range_query(self, schema_field: IntegerField):
-        start, end, eq = self._match_groups
-
-        if eq is not None:
-            # Exact value
-            v = schema_field.preprocess_value(int(eq))
-            return xapian.Query(
-                Op.ValueRange.value,
-                schema_field.slot,
-                v,
-                v,
-            )
-        elif start is not None and end is not None:
-            return xapian.Query(
-                Op.ValueRange.value,
-                schema_field.slot,
-                (schema_field.preprocess_value(int(start))),
-                (schema_field.preprocess_value(int(end))),
-            )
-        elif start is not None:
-            return xapian.Query(
-                Op.ValueGe.value,
-                schema_field.slot,
-                (schema_field.preprocess_value(int(start))),
-            )
-        elif end is not None:
-            return xapian.Query(
-                Op.ValueLe.value,
-                schema_field.slot,
-                (schema_field.preprocess_value(int(end))),
-            )
+    def _merge_queries(self, subqueries):
+        if len(subqueries) == 1:
+            return subqueries[0]
+        else:
+            return xapian.Query(xapian.Query.OP_OR, subqueries)
 
     def _expect(self, token_or_tokens, what):
         if not isinstance(token_or_tokens, list):

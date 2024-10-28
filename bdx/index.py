@@ -54,6 +54,28 @@ class DatabaseField:
             value = value.lower()
         return value
 
+    def make_query(self, value: str, wildcard: bool = False) -> xapian.Query:
+        """Make a query for the given value.
+
+        Args:
+            value: The string to search for in the query.
+            wildcard: If true, make a wildcard query.
+
+        """
+        if self.boolean or not self.lowercase:
+            term = f"{self.prefix}{value}"
+        else:
+            term = f"{self.prefix}{value.lower()}"
+        if wildcard:
+            return xapian.Query(
+                xapian.Query.OP_WILDCARD,
+                term,
+                0,
+                xapian.Query.WILDCARD_LIMIT_FIRST,
+            )
+        else:
+            return xapian.Query(term)
+
 
 class TextField(DatabaseField):
     """A database field that indexes text."""
@@ -82,6 +104,57 @@ class IntegerField(DatabaseField):
     def index(self, document: xapian.Document, value: Any):
         """Index ``value`` in the ``document``."""
         document.add_value(self.slot, self.preprocess_value(value))
+
+    def make_query(self, value: str, wildcard: bool = False) -> xapian.Query:
+        """Make a query for the given value.
+
+        Args:
+            value: The string to search for in the query.  It must hold an
+                integer or a xapian range expression: FROM..TO.
+            wildcard: Unused.  If True, raises ValueError.
+
+        """
+        if wildcard:
+            msg = "Wildcard is not available for IntegerField"
+            raise ValueError(msg)
+
+        match = re.match("([0-9]+)?[.][.]([0-9]+)?|([0-9]+)", value)
+        if not match:
+            return xapian.Query()
+
+        start, end, eq = match.groups()
+
+        if eq is not None:
+            # Exact value
+            v = self.preprocess_value(int(eq))
+            return xapian.Query(
+                xapian.Query.OP_VALUE_RANGE,
+                self.slot,
+                v,
+                v,
+            )
+        elif start is not None and end is not None:
+            return xapian.Query(
+                xapian.Query.OP_VALUE_RANGE,
+                self.slot,
+                (self.preprocess_value(int(start))),
+                (self.preprocess_value(int(end))),
+            )
+        elif start is not None:
+            return xapian.Query(
+                xapian.Query.OP_VALUE_GE,
+                self.slot,
+                (self.preprocess_value(int(start))),
+            )
+        elif end is not None:
+            return xapian.Query(
+                xapian.Query.OP_VALUE_LE,
+                self.slot,
+                (self.preprocess_value(int(end))),
+            )
+        else:
+            msg = f"Invalid integer range query: {value}"
+            raise ValueError(msg)
 
 
 class SymbolNameField(TextField):

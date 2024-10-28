@@ -1,15 +1,15 @@
 import pytest
 import xapian
 from bdx.index import DatabaseField, IntegerField, Schema
-from bdx.query_parser import Op, QueryParser
+from bdx.query_parser import QueryParser
 from pytest import fixture
 
-AND = Op.And.value
-OR = Op.Or.value
-WILDCARD = Op.Wildcard.value
-VALUE_RANGE = Op.ValueRange.value
-VALUE_GE = Op.ValueGe.value
-VALUE_LE = Op.ValueLe.value
+AND = 0
+OR = 1
+WILDCARD = 2
+VALUE_RANGE = 3
+VALUE_GE = 4
+VALUE_LE = 5
 MATCH_ALL = xapian.Query.MatchAll  # pyright: ignore
 
 
@@ -18,6 +18,14 @@ def query_parser(monkeypatch):
     schema = Schema([DatabaseField("name", "XNAME")])
     parser = QueryParser(schema)
     monkeypatch.setattr(xapian, "Query", lambda *args: tuple(args))
+    monkeypatch.setattr(xapian.Query, "OP_AND", AND, raising=False)
+    monkeypatch.setattr(xapian.Query, "OP_OR", OR, raising=False)
+    monkeypatch.setattr(xapian.Query, "OP_WILDCARD", WILDCARD, raising=False)
+    monkeypatch.setattr(
+        xapian.Query, "OP_VALUE_RANGE", VALUE_RANGE, raising=False
+    )
+    monkeypatch.setattr(xapian.Query, "OP_VALUE_GE", VALUE_GE, raising=False)
+    monkeypatch.setattr(xapian.Query, "OP_VALUE_LE", VALUE_LE, raising=False)
     monkeypatch.setattr(
         xapian.Query, "WILDCARD_LIMIT_FIRST", 10, raising=False
     )
