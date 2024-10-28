@@ -1,6 +1,6 @@
 import pytest
 import xapian
-from bdx.index import DatabaseField, IntegerField, Schema
+from bdx.index import DatabaseField, IntegerField, PathField, Schema
 from bdx.query_parser import QueryParser
 from pytest import fixture
 
@@ -190,11 +190,11 @@ def test_wildcard_with_no_wildcard_field(query_parser):
     )
 
 
-def test_case_conversion(query_parser):
+def test_path_field(query_parser):
     query_parser.schema = Schema(
         [
-            DatabaseField("name", "XNAME", lowercase=True),
-            DatabaseField("path", "XPATH", lowercase=False),
+            DatabaseField("name", "XNAME"),
+            PathField("path", "XPATH"),
         ]
     )
 

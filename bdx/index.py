@@ -25,7 +25,6 @@ class DatabaseField:
 
     name: str
     prefix: str
-    lowercase: bool = True
 
     def index(self, document: xapian.Document, value: Any):
         """Index ``value`` in the ``document``."""
@@ -48,8 +47,7 @@ class DatabaseField:
             value = str(value)
         if isinstance(value, str):
             value = value.encode()
-        if self.lowercase:
-            value = value.lower()
+        value = value.lower()
         return value
 
     def make_query(self, value: str, wildcard: bool = False) -> xapian.Query:
@@ -60,10 +58,8 @@ class DatabaseField:
             wildcard: If true, make a wildcard query.
 
         """
-        if self.lowercase:
-            term = f"{self.prefix}{value.lower()}"
-        else:
-            term = f"{self.prefix}{value}"
+        value = self.preprocess_value(value).decode()
+        term = f"{self.prefix}{value}"
         if wildcard:
             return xapian.Query(
                 xapian.Query.OP_WILDCARD,
@@ -90,7 +86,7 @@ class TextField(DatabaseField):
 class IntegerField(DatabaseField):
     """A database field that indexes integers."""
 
-    slot: int = 0
+    slot: int
 
     def preprocess_value(self, value: Any) -> bytes:
         """Preprocess the value before indexing it."""
@@ -153,6 +149,28 @@ class IntegerField(DatabaseField):
         else:
             msg = f"Invalid integer range query: {value}"
             raise ValueError(msg)
+
+
+class PathField(DatabaseField):
+    """Represents a path field in the database."""
+
+    def preprocess_value(self, value: Any) -> bytes:
+        """Preprocess the value before indexing it."""
+        if not isinstance(value, (str, bytes)):
+            value = str(value)
+        if isinstance(value, str):
+            value = value.encode()
+
+        # PathField does not make value lowercase.
+        return value
+
+    def index(self, document: xapian.Document, value: Any):
+        """Index ``value`` in the ``document``."""
+        path = Path(value)
+        super().index(document, path)
+
+        # Also index the basename
+        super().index(document, path.name)
 
 
 class SymbolNameField(TextField):
@@ -220,7 +238,7 @@ class SymbolIndex:
 
     SCHEMA = Schema(
         [
-            DatabaseField("path", "XP", lowercase=False),
+            PathField("path", "XP"),
             SymbolNameField("name", "XN"),
             TextField("section", "XSN"),
             IntegerField("size", "XSZ", slot=0),
@@ -419,7 +437,9 @@ class SymbolIndex:
 
         for term in all_terms:
             value = term.term[len(field_data.prefix) :]
-            yield Path(value.decode())
+            path = Path(value.decode())
+            if path.is_absolute():
+                yield path
 
     def search(
         self,
