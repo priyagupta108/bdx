@@ -636,6 +636,6 @@ def search_index(
     if not query:
         query = "*:*"
 
-    with SymbolIndex(index_path) as index:
+    with SymbolIndex(index_path, readonly=True) as index:
         for symbol in index.search(query, limit=limit):
             consumer(symbol)
