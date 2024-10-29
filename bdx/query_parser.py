@@ -326,14 +326,12 @@ class QueryParser:
         )
 
         schema_field = self.schema[field]
-        if self._token == Token.Intrange and isinstance(
-            schema_field, IntegerField
-        ):
-            self._parsed = schema_field.make_query(self._value)
-        else:
-            self._parsed = schema_field.make_query(
-                self._value, wildcard=self._token == Token.Wildcard
-            )
+
+        self._parsed = schema_field.make_query(
+            self._value,
+            wildcard=self._token == Token.Wildcard
+            and not isinstance(schema_field, IntegerField),
+        )
 
         self._next_token()
         return True
