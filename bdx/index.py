@@ -321,7 +321,7 @@ class SymbolIndex:
     @staticmethod
     def default_path(directory: Path | str) -> Path:
         """Return a default index path for binary ``directory``."""
-        parts = Path(directory).parts[1:]
+        parts = Path(directory).absolute().parts[1:]
         global_cache_dir = Path(
             os.getenv("XDG_CACHE_HOME", "~/.cache")
         ).expanduser()
@@ -554,7 +554,11 @@ def _read_and_serialize_symtable(file: Path) -> list[bytes]:
     return ret
 
 
-def index_binary_directory(directory, index_path) -> IndexingStats:
+def index_binary_directory(
+    directory: str | Path,
+    index_path: Path,
+    use_compilation_database: bool = False,
+) -> IndexingStats:
     """Index the given directory."""
     stats = IndexingStats()
 
@@ -566,7 +570,12 @@ def index_binary_directory(directory, index_path) -> IndexingStats:
 
         mtime = index.mtime()
         existing_files = list(index.all_files())
-        bdir = BinaryDirectory(bindir_path, mtime, existing_files)
+        bdir = BinaryDirectory(
+            bindir_path,
+            mtime,
+            existing_files,
+            use_compilation_database=use_compilation_database,
+        )
 
         changed_files = list(bdir.changed_files())
         deleted_files = list(bdir.deleted_files())

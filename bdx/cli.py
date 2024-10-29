@@ -3,51 +3,53 @@ from dataclasses import asdict
 from functools import wraps
 from pathlib import Path
 from sys import exit, stderr, stdout
+from typing import Optional
 
 import click
 
-from bdx.binary import Symbol
+from bdx.binary import BinaryDirectory, Symbol, find_compilation_database
 from bdx.index import SymbolIndex, index_binary_directory, search_index
 from bdx.query_parser import QueryParser
+
+
+def guess_directory_from_index_path(
+    index_path: Optional[Path],
+) -> Optional[Path]:
+    """Return the path to the binary directory for given index path."""
+    if index_path is not None and Path(index_path).exists():
+        with SymbolIndex(index_path) as index:
+            binary_dir = index.binary_dir()
+
+            if binary_dir is not None:
+                return binary_dir
+    return None
+
+
+def default_directory(ctx: click.Context) -> Path:
+    """Return the default binary directory using given CLI context."""
+    cwd = Path().absolute()
+    if "use_compilation_database" in ctx.params:
+        compdb = find_compilation_database(cwd)
+        if compdb is not None:
+            return compdb.parent
+
+    possible_index_paths = []
+    possible_index_paths.append(ctx.params.get("index_path"))
+    possible_index_paths.append(SymbolIndex.default_path(Path(".")))
+    possible_index_paths.extend(
+        [SymbolIndex.default_path(x) for x in cwd.parents]
+    )
+    for index_path in possible_index_paths:
+        directory = guess_directory_from_index_path(index_path)
+        if directory:
+            return directory
+
+    return cwd
 
 
 def _common_options(index_must_exist=False):
 
     def decorator(f):
-
-        did_guess_directory = False
-
-        def default_directory(ctx, _param, value):
-            if value:
-                return value
-
-            index_path = None
-
-            if "index_path" in ctx.params:
-                index_path = Path(ctx.params["index_path"])
-            else:
-                path = Path().absolute()
-                while path.parent != path:
-                    maybe_index = SymbolIndex.default_path(path)
-                    if maybe_index.exists():
-                        index_path = maybe_index
-                        break
-                    path = path.parent
-
-            if index_path is not None and index_path.exists():
-                with SymbolIndex(index_path) as index:
-                    binary_dir = index.binary_dir()
-
-                    nonlocal did_guess_directory
-                    did_guess_directory = True
-
-                    if binary_dir is not None:
-                        return binary_dir
-
-            raise click.MissingParameter("Could not guess it.")
-
-        def default_index_path(ctx, _param, value):
-            return value or SymbolIndex.default_path(ctx.params["directory"])
 
         @click.option(
             "-d",
@@ -58,8 +60,7 @@ def _common_options(index_must_exist=False):
                 file_okay=False,
                 resolve_path=True,
             ),
-            help="Path to the binary directory..",
-            callback=default_directory,
+            help="Path to the binary directory.",
         )
         @click.option(
             "--index-path",
@@ -70,19 +71,27 @@ def _common_options(index_must_exist=False):
                 resolve_path=True,
             ),
             help="Path to the index.  By default, it is located in ~/.cache.",
-            callback=default_index_path,
         )
+        @click.pass_context
         @wraps(f)
         def inner(
-            *args, directory: str | Path, index_path: str | Path, **kwargs
+            ctx: click.Context,
+            *args,
+            directory: str | Path,
+            index_path: str | Path,
+            **kwargs,
         ):
-            directory = Path(directory)
-            index_path = Path(index_path)
+            did_guess_directory = False
 
-            if index_must_exist:
-                if not index_path.exists():
-                    msg = f"Directory is not indexed: {directory}"
-                    raise click.BadParameter(msg)
+            if not directory:
+                directory = default_directory(ctx)
+                did_guess_directory = True
+            if not index_path:
+                index_path = SymbolIndex.default_path(directory)
+
+            index_path = Path(index_path)
+            directory = Path(directory)
+
             if index_path.exists():
                 try:
                     index = SymbolIndex(index_path, readonly=True)
@@ -95,6 +104,9 @@ def _common_options(index_must_exist=False):
                 except SymbolIndex.Error as e:
                     msg = f"Invalid index: {index_path}"
                     raise click.BadParameter(msg) from e
+            elif index_must_exist:
+                msg = f"Directory is not indexed: {directory}"
+                raise click.BadParameter(msg)
 
             if did_guess_directory:
                 click.echo(
@@ -117,9 +129,18 @@ def cli():
 
 @cli.command()
 @_common_options(index_must_exist=False)
-def index(directory, index_path):
+@click.option("-c", "--use-compilation-database", is_flag=True)
+def index(directory, index_path, use_compilation_database):
     """Index the specified directory."""
-    stats = index_binary_directory(directory, index_path)
+    try:
+        stats = index_binary_directory(
+            directory,
+            index_path,
+            use_compilation_database,
+        )
+    except BinaryDirectory.CompilationDatabaseNotFoundError as e:
+        click.echo(f"error: {e}", file=stderr)
+        exit(1)
 
     click.echo(
         f"Files indexed: {stats.num_files_indexed} "

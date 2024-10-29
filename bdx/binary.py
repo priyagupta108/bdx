@@ -1,7 +1,9 @@
+import json
+import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Iterator
+from typing import Iterator, Optional
 
 from elftools.elf.elffile import ELFFile
 
@@ -42,13 +44,36 @@ def read_symtable(file: str | Path) -> list[Symbol]:
         return symbols
 
 
+def find_compilation_database(path: Path) -> Optional[Path]:
+    """Find the compilation db file in ``path`` or any of it's parent dirs."""
+    for dir in [path, *path.parents]:
+        file = dir / "compile_commands.json"
+        if file.exists():
+            return file
+    return None
+
+
+def is_readable_elf_file(path: Path) -> bool:
+    """Return true if ``path`` points to an ELF file with read permissions."""
+    try:
+        with open(path, "rb") as f:
+            magic = f.read(4)
+            return magic == b"\x7fELF"
+    except IOError:
+        return False
+
+
 @dataclass(frozen=True)
 class BinaryDirectory:
-    """Represents a directory containing zero or more BinaryFiles."""
+    """Represents a directory containing zero or more binary files."""
 
     path: Path
     last_mtime: datetime = datetime.fromtimestamp(0)
     previous_file_list: list[Path] = field(repr=False, default_factory=list)
+    use_compilation_database: bool = False
+
+    class CompilationDatabaseNotFoundError(FileNotFoundError):
+        """Could not find the compilation database."""
 
     def changed_files(self) -> Iterator[Path]:
         """Yield files that were changed/created since last run."""
@@ -72,4 +97,45 @@ class BinaryDirectory:
         yield from deleted
 
     def _find_files(self) -> Iterator[Path]:
-        yield from self.path.rglob("*.o")
+        if self.use_compilation_database:
+            yield from self._find_files_from_compilation_database()
+        else:
+            yield from self.path.rglob("*.o")
+
+    def _find_files_from_compilation_database(self) -> Iterator[Path]:
+        path = find_compilation_database(self.path)
+        if not path:
+            msg = (
+                f"compile_commands.json file not found in {path} "
+                "or any of the parent directories"
+            )
+            raise BinaryDirectory.CompilationDatabaseNotFoundError(msg)
+
+        with open(path, "r") as f:
+            data = json.load(f)
+
+        for entry in data:
+            directory = Path(entry.get("directory", path.parent))
+            file = None
+
+            if "output" in entry:
+                file = Path(entry["output"])
+            elif "command" in entry:
+                command = entry["command"]
+                match = re.match(".* -o *([^ ]+).*", command)
+                if match:
+                    file = Path(match.group(1))
+            elif "arguments" in entry:
+                args = entry["arguments"]
+                for prev, next in zip(args, args[1:]):
+                    if prev == "-o":
+                        file = Path(next)
+                        break
+
+            if not file:
+                filename = Path(entry["file"]).stem
+                file = directory / (filename + ".o")
+            if not file.is_absolute():
+                file = directory / file
+            if is_readable_elf_file(file):
+                yield file
