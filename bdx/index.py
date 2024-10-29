@@ -105,13 +105,9 @@ class IntegerField(DatabaseField):
         Args:
             value: The string to search for in the query.  It must hold an
                 integer or a xapian range expression: FROM..TO.
-            wildcard: Unused.  If True, raises ValueError.
+            wildcard: Unused.
 
         """
-        if wildcard:
-            msg = "Wildcard is not available for IntegerField"
-            raise ValueError(msg)
-
         match = re.match("([0-9]+)?[.][.]([0-9]+)?|([0-9]+)", value)
         if not match:
             return xapian.Query()
@@ -488,6 +484,7 @@ class SymbolIndex:
             SymbolIndex.SCHEMA,
             default_fields=["name"],
             wildcard_field="name",
+            auto_wildcard=True,
         )
         return query_parser.parse_query(query)
 
@@ -628,11 +625,6 @@ def search_index(
     limit: Optional[int] = None,
 ):
     """Search the given index."""
-    # Support wildcard search without specifying the field name
-    query = re.sub(
-        "name:name:", "name:", re.sub("([^ ]+)[*]", "name:\\1*", query)
-    )
-
     if not query:
         query = "*:*"
 

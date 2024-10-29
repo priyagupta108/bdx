@@ -79,6 +79,7 @@ class QueryParser:
         schema: Schema,
         default_fields: Optional[list[str]] = None,
         wildcard_field: Optional[str] = None,
+        auto_wildcard: bool = False,
     ):
         """Construct a QueryParser using given schema.
 
@@ -90,11 +91,15 @@ class QueryParser:
                 (e.g. "val*" instead of "field:val*").
             wildcard_field: Name of the field that will be used when the user
                 enters a wildcard without specifying a field.
+            auto_wildcard: If true, then each search term is implicitly
+                converted into a wildcard.
+                E.g. search "term" will become "field:term*".
 
         """
         self.schema = schema
         self.default_fields = default_fields or list(schema)
         self.wildcard_field = wildcard_field
+        self.auto_wildcard = auto_wildcard
         self._query = ""
         self._token: Optional[Token] = None
         self._value: str = ""
@@ -266,7 +271,9 @@ class QueryParser:
         value = self._value
         subqueries = []
         for field in self.default_fields:
-            subquery = self.schema[field].make_query(value)
+            subquery = self.schema[field].make_query(
+                value, wildcard=self.auto_wildcard
+            )
             subqueries.append(subquery)
 
         self._next_token()

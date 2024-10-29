@@ -112,6 +112,29 @@ def test_wildcard(query_parser):
     )
 
 
+def test_wildcard_with_no_wildcard_field(query_parser):
+    query_parser.wildcard_field = None
+    assert query_parser.parse_query("fo*") == ()
+    assert query_parser.parse_query("name:fo*") == (
+        WILDCARD,
+        "XNAMEfo",
+        0,
+        xapian.Query.WILDCARD_LIMIT_FIRST,
+    )
+
+
+def test_auto_wildcard(query_parser):
+    query_parser.wildcard_field = "name"
+    query_parser.auto_wildcard = True
+    assert query_parser.parse_query("fo") == (
+        WILDCARD,
+        "XNAMEfo",
+        0,
+        xapian.Query.WILDCARD_LIMIT_FIRST,
+    )
+    assert query_parser.parse_query("name:fo") == ("XNAMEfo",)
+
+
 def test_intrange(query_parser):
     slot = 99928
     query_parser.schema = schema = Schema(
@@ -176,17 +199,6 @@ def test_intrange(query_parser):
             slot + 1,
             schema["other_value"].preprocess_value(10),
         ),
-    )
-
-
-def test_wildcard_with_no_wildcard_field(query_parser):
-    query_parser.wildcard_field = None
-    assert query_parser.parse_query("fo*") == ()
-    assert query_parser.parse_query("name:fo*") == (
-        WILDCARD,
-        "XNAMEfo",
-        0,
-        xapian.Query.WILDCARD_LIMIT_FIRST,
     )
 
 
