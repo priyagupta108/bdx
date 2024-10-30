@@ -178,9 +178,18 @@ class SymbolNameField(TextField):
 
         if isinstance(value, bytes):
             value = value.decode()
+
+        # Only index letters
         value = re.sub("[^a-zA-Z]+", " ", value)
+
+        # Split CamelCase into words
         value += re.sub("([A-Z]+)", " \\1", value)
 
+        # Split into lowercase words
+        value += re.sub("([A-Z]+)", " ", value)
+
+        # Remove duplicates
+        value = " ".join(set(value.split()))
         super().index(document, value)
 
 
