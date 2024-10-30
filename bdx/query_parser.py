@@ -19,6 +19,7 @@ class Token(Enum):
     Rparen = ")"
     And = "AND"
     Or = "OR"
+    Not = "NOT"
     Wildcard = "WILDCARD"
     Intrange = "INTRANGE"
 
@@ -29,6 +30,7 @@ class Token(Enum):
             (Token.Whitespace, re.compile(r"\s+")),
             (Token.And, re.compile(r"AND\b")),
             (Token.Or, re.compile(r"OR\b")),
+            (Token.Not, re.compile(r"NOT\b|!")),
             (Token.Lparen, re.compile(r"[(]")),
             (Token.Rparen, re.compile(r"[)]")),
             (Token.String, re.compile(r'"([^"]+)"')),
@@ -63,11 +65,13 @@ class QueryParser:
     # andexpr = expr [["AND"] andexpr]
     #
     # expr =
-    #         "(" query ")"
+    #         NOT expr
+    #         | "(" query ")"
     #         | [ field ] value
     #
     # value = term | string | wildcard | intrange
     #
+    # NOT = NOT|!
     # field = [a-zA-Z_]+ ":"
     # term = [a-zA-Z_][a-zA-Z0-9_.]*
     # string = '"' [^"]+ '"'
@@ -214,7 +218,16 @@ class QueryParser:
     def _parse_expr(self):
         retval = True
 
-        if self._token == Token.Lparen:
+        if self._token == Token.Not:
+            self._next_token()
+            retval = self._parse_expr()
+            if not retval:
+                msg = "Expected an expression"
+                raise QueryParser.Error(msg)
+            self._parsed = xapian.Query(
+                xapian.Query.OP_AND_NOT, _MATCH_ALL, self._parsed
+            )
+        elif self._token == Token.Lparen:
             pos = self._pos
             self._next_token()
             self._parsed = None

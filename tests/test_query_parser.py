@@ -10,6 +10,7 @@ WILDCARD = 2
 VALUE_RANGE = 3
 VALUE_GE = 4
 VALUE_LE = 5
+AND_NOT = 6
 MATCH_ALL = xapian.Query.MatchAll  # pyright: ignore
 
 
@@ -26,6 +27,7 @@ def query_parser(monkeypatch):
     )
     monkeypatch.setattr(xapian.Query, "OP_VALUE_GE", VALUE_GE, raising=False)
     monkeypatch.setattr(xapian.Query, "OP_VALUE_LE", VALUE_LE, raising=False)
+    monkeypatch.setattr(xapian.Query, "OP_AND_NOT", AND_NOT, raising=False)
     monkeypatch.setattr(
         xapian.Query, "WILDCARD_LIMIT_FIRST", 10, raising=False
     )
@@ -41,6 +43,28 @@ def test_empty(query_parser):
 
 def test_matchall(query_parser):
     assert query_parser.parse_query("  *:*  ") == MATCH_ALL
+
+
+def test_not(query_parser):
+    assert query_parser.parse_query("NOT foo") == (
+        AND_NOT,
+        MATCH_ALL,
+        ("XNAMEfoo",),
+    )
+    assert query_parser.parse_query("!foo") == (
+        AND_NOT,
+        MATCH_ALL,
+        ("XNAMEfoo",),
+    )
+    assert query_parser.parse_query("NOT foo bar") == (
+        AND,
+        (AND_NOT, MATCH_ALL, ("XNAMEfoo",)),
+        ("XNAMEbar",),
+    )
+    with pytest.raises(QueryParser.Error):
+        query_parser.parse_query("NOT")
+    with pytest.raises(QueryParser.Error):
+        query_parser.parse_query("!NOT")
 
 
 def test_invalid_token(query_parser):
@@ -285,14 +309,19 @@ def test_multiple_default_fields(query_parser):
 
 def test_ignores_invalid_tokens(query_parser):
     query_parser.ignore_unknown_tokens = True
-    assert query_parser.parse_query("  /?# foo ?!@#  ") == ("XNAMEfoo",)
+    assert query_parser.parse_query("  /~?# foo ?$@#  ") == ("XNAMEfoo",)
+    assert query_parser.parse_query("  !/~?# foo ?$@#  ") == (
+        AND_NOT,
+        MATCH_ALL,
+        ("XNAMEfoo",),
+    )
     assert query_parser.parse_query("  #name://foo//  ") == ("XNAMEfoo",)
     assert query_parser.parse_query("  #name://foo//bar  ") == (
         AND,
         ("XNAMEfoo",),
         ("XNAMEbar",),
     )
-    assert query_parser.parse_query("~!@#$%^&*foo+*&^%$#@!~") == ("XNAMEfoo",)
+    assert query_parser.parse_query("~@#$%^&*foo+*&^%$#@~") == ("XNAMEfoo",)
 
 
 def test_or(query_parser):
@@ -328,6 +357,10 @@ def test_operand_missing(query_parser):
         query_parser.parse_query("foo AND AND")
     with pytest.raises(QueryParser.Error):
         query_parser.parse_query("foo AND OR")
+    with pytest.raises(QueryParser.Error):
+        query_parser.parse_query("NOT")
+    with pytest.raises(QueryParser.Error):
+        query_parser.parse_query("NOT NOT")
 
 
 def test_parens(query_parser):
