@@ -32,9 +32,7 @@ class DatabaseField:
         prefix = self.prefix.encode()
 
         term = prefix + value
-
-        if len(term) > MAX_TERM_SIZE:
-            return
+        term = term[:MAX_TERM_SIZE]
 
         document.add_term(term)
 
