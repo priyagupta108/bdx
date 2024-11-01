@@ -77,7 +77,9 @@ class TextField(DatabaseField):
         termgen = xapian.TermGenerator()
         termgen.set_document(document)
         termgen.set_max_word_length(MAX_TERM_SIZE - len(self.prefix) - 1)
-        termgen.index_text(self.preprocess_value(value), 1, self.prefix)
+        termgen.index_text_without_positions(
+            self.preprocess_value(value), 1, self.prefix
+        )
 
 
 @dataclass(frozen=True)
