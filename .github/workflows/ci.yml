@@ -1,0 +1,60 @@
+name: Python package
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version:
+          - "3.9"
+          - "3.10"
+          - "3.11"
+          - "3.12"
+          - "3.13"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: set up python ${{ matrix.python-version }}
+        uses: actions/setup-python@master
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install xapian
+        run: |
+          # Ubuntu<24
+          test -e /etc/apt/sources.list && \
+            sudo sed -i '/^deb/P;s/^deb/deb-src/' /etc/apt/sources.list
+          # Ubuntu>=24
+          sudo sed -i 's/^Types: deb/Types: deb deb-src/' /etc/apt/sources.list.d/*
+
+          sudo apt-get update
+          sudo apt-get install wget xz-utils build-essential zlib1g-dev
+          sudo apt-get build-dep libxapian-dev
+          cd /usr/local/src
+          sudo mkdir -m 777 xapian
+          cd xapian
+          wget https://oligarchy.co.uk/xapian/1.4.26/xapian-core-1.4.26.tar.xz
+          tar -xvaf xapian*.tar.xz
+          cd xapian*/
+          ./configure --prefix=/usr
+          make -j 12
+          sudo make install
+
+      - name: Install xapian-bindings
+        run: VIRTUAL_ENV=$Python_ROOT_DIR ./install_xapian_bindings.sh
+
+      - name: Install the project
+        run: pip install -e .[dev]
+
+      - name: Lint
+        run: make lint
+
+      - name: Tests
+        run: make check
