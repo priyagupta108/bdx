@@ -131,15 +131,12 @@ def test_multiple_terms(query_parser):
             "XNAMEfoo",
         ),
         (
-            AND,
-            (
-                LEAF_TERM,
-                "XNAMEbar",
-            ),
-            (
-                LEAF_TERM,
-                "XNAMEbaz",
-            ),
+            LEAF_TERM,
+            "XNAMEbar",
+        ),
+        (
+            LEAF_TERM,
+            "XNAMEbaz",
         ),
     )
 

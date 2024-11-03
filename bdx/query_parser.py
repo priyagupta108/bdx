@@ -187,6 +187,8 @@ class QueryParser:
             elif rhs != self._empty:
                 self._parsed = rhs
 
+        self._parsed = self._flatten_query(xapian.Query.OP_OR, self._parsed)
+
         return True
 
     def _parse_andexpr(self):
@@ -212,6 +214,8 @@ class QueryParser:
                 self._parsed = xapian.Query(xapian.Query.OP_AND, lhs, rhs)
         else:
             self._parsed = lhs
+
+        self._parsed = self._flatten_query(xapian.Query.OP_AND, self._parsed)
 
         return True
 
@@ -361,6 +365,25 @@ class QueryParser:
             return subqueries[0]
         else:
             return xapian.Query(xapian.Query.OP_OR, subqueries)
+
+    def _flatten_query(self, op, query: Optional[xapian.Query]):
+        if query is not None and query.get_type() == op:
+            subqueries = self._get_all_subqueries_of_type(op, query)
+            return xapian.Query(op, subqueries)
+        return query
+
+    def _get_all_subqueries_of_type(self, op, query: xapian.Query):
+        if query.get_type() == op and query.get_num_subqueries() >= 2:
+            subqueries = [
+                query.get_subquery(i)
+                for i in range(query.get_num_subqueries())
+            ]
+            ret = []
+            for subq in subqueries:
+                flattened = self._get_all_subqueries_of_type(op, subq)
+                ret.extend(flattened)
+            return ret
+        return [query]
 
     def _expect(self, token_or_tokens, what):
         if not isinstance(token_or_tokens, list):
