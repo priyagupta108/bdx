@@ -4,62 +4,84 @@ from bdx.index import DatabaseField, IntegerField, PathField, Schema
 from bdx.query_parser import QueryParser
 from pytest import fixture
 
-AND = 0
-OR = 1
-WILDCARD = 2
-VALUE_RANGE = 3
-VALUE_GE = 4
-VALUE_LE = 5
-AND_NOT = 6
-MATCH_ALL = xapian.Query.MatchAll  # pyright: ignore
+AND = xapian.Query.OP_AND
+OR = xapian.Query.OP_OR
+WILDCARD = xapian.Query.OP_WILDCARD
+VALUE_RANGE = xapian.Query.OP_VALUE_RANGE
+VALUE_GE = xapian.Query.OP_VALUE_GE
+VALUE_LE = xapian.Query.OP_VALUE_LE
+AND_NOT = xapian.Query.OP_AND_NOT
+MATCH_ALL = (xapian.Query.MatchAll.get_type(),)  # pyright: ignore
+EMPTY_MATCH = (xapian.Query().get_type(),)
+LEAF_TERM = 100
 
 
 @fixture
-def query_parser(monkeypatch):
+def query_parser():
     schema = Schema([DatabaseField("name", "XNAME")])
-    parser = QueryParser(schema)
-    monkeypatch.setattr(xapian, "Query", lambda *args: tuple(args))
-    monkeypatch.setattr(xapian.Query, "OP_AND", AND, raising=False)
-    monkeypatch.setattr(xapian.Query, "OP_OR", OR, raising=False)
-    monkeypatch.setattr(xapian.Query, "OP_WILDCARD", WILDCARD, raising=False)
-    monkeypatch.setattr(
-        xapian.Query, "OP_VALUE_RANGE", VALUE_RANGE, raising=False
-    )
-    monkeypatch.setattr(xapian.Query, "OP_VALUE_GE", VALUE_GE, raising=False)
-    monkeypatch.setattr(xapian.Query, "OP_VALUE_LE", VALUE_LE, raising=False)
-    monkeypatch.setattr(xapian.Query, "OP_AND_NOT", AND_NOT, raising=False)
-    monkeypatch.setattr(
-        xapian.Query, "WILDCARD_LIMIT_FIRST", 10, raising=False
+    yield QueryParser(schema)
+
+
+def query_to_tuple(query: xapian.Query):
+    type = query.get_type()
+    num_subqueries = query.get_num_subqueries()
+    subqueries = [query.get_subquery(i) for i in range(num_subqueries)]
+    subqueries = [query_to_tuple(subq) for subq in subqueries]
+
+    terms = (
+        [x.decode() for x in query]  # pyright: ignore
+        if type == LEAF_TERM or type == WILDCARD
+        else []
     )
 
-    yield parser
+    return (type, *subqueries, *terms)
+
+
+def query_to_str(query: xapian.Query):
+    return str(query)
 
 
 def test_empty(query_parser):
-    assert query_parser.parse_query("") == ()
-    assert query_parser.parse_query("  ") == ()
-    assert query_parser.parse_query("  \n   ") == ()
+    assert query_to_tuple(query_parser.parse_query("")) == EMPTY_MATCH
+    assert query_to_tuple(query_parser.parse_query("  ")) == EMPTY_MATCH
+    assert query_to_tuple(query_parser.parse_query("  \n   ")) == EMPTY_MATCH
 
 
 def test_matchall(query_parser):
-    assert query_parser.parse_query("  *:*  ") == MATCH_ALL
+    assert query_to_tuple(query_parser.parse_query("  *:*  ")) == MATCH_ALL
 
 
 def test_not(query_parser):
-    assert query_parser.parse_query("NOT foo") == (
+    assert query_to_tuple(query_parser.parse_query("NOT foo")) == (
         AND_NOT,
         MATCH_ALL,
-        ("XNAMEfoo",),
+        (
+            LEAF_TERM,
+            "XNAMEfoo",
+        ),
     )
-    assert query_parser.parse_query("!foo") == (
+    assert query_to_tuple(query_parser.parse_query("!foo")) == (
         AND_NOT,
         MATCH_ALL,
-        ("XNAMEfoo",),
+        (
+            LEAF_TERM,
+            "XNAMEfoo",
+        ),
     )
-    assert query_parser.parse_query("NOT foo bar") == (
+    assert query_to_tuple(query_parser.parse_query("NOT foo bar")) == (
         AND,
-        (AND_NOT, MATCH_ALL, ("XNAMEfoo",)),
-        ("XNAMEbar",),
+        (
+            AND_NOT,
+            MATCH_ALL,
+            (
+                LEAF_TERM,
+                "XNAMEfoo",
+            ),
+        ),
+        (
+            LEAF_TERM,
+            "XNAMEbar",
+        ),
     )
     with pytest.raises(QueryParser.Error):
         query_parser.parse_query("NOT")
@@ -80,83 +102,108 @@ def test_invalid_token(query_parser):
 
 
 def test_single_term(query_parser):
-    assert query_parser.parse_query("foo") == ("XNAMEfoo",)
-    assert query_parser.parse_query("  foo  ") == ("XNAMEfoo",)
+    assert query_to_tuple(query_parser.parse_query("foo")) == (
+        LEAF_TERM,
+        "XNAMEfoo",
+    )
+    assert query_to_tuple(query_parser.parse_query("  foo  ")) == (
+        LEAF_TERM,
+        "XNAMEfoo",
+    )
 
 
 def test_multiple_terms(query_parser):
-    assert query_parser.parse_query("foo bar") == (
+    assert query_to_tuple(query_parser.parse_query("foo bar")) == (
         AND,
-        ("XNAMEfoo",),
-        ("XNAMEbar",),
+        (
+            LEAF_TERM,
+            "XNAMEfoo",
+        ),
+        (
+            LEAF_TERM,
+            "XNAMEbar",
+        ),
     )
-    assert query_parser.parse_query("foo bar baz") == (
+    assert query_to_tuple(query_parser.parse_query("foo bar baz")) == (
         AND,
-        ("XNAMEfoo",),
+        (
+            LEAF_TERM,
+            "XNAMEfoo",
+        ),
         (
             AND,
-            ("XNAMEbar",),
-            ("XNAMEbaz",),
+            (
+                LEAF_TERM,
+                "XNAMEbar",
+            ),
+            (
+                LEAF_TERM,
+                "XNAMEbaz",
+            ),
         ),
     )
 
 
 def test_string(query_parser):
-    assert query_parser.parse_query(' "foo baz"') == ("XNAMEfoo baz",)
+    assert query_to_tuple(query_parser.parse_query(' "foo baz"')) == (
+        LEAF_TERM,
+        "XNAMEfoo baz",
+    )
 
 
 def test_field_with_value(query_parser):
-    assert query_parser.parse_query("name:bar") == ("XNAMEbar",)
-    assert query_parser.parse_query("name: FOO") == ("XNAMEfoo",)
+    assert query_to_tuple(query_parser.parse_query("name:bar")) == (
+        LEAF_TERM,
+        "XNAMEbar",
+    )
+    assert query_to_tuple(query_parser.parse_query("name: FOO")) == (
+        LEAF_TERM,
+        "XNAMEfoo",
+    )
 
 
 def test_field_with_string_value(query_parser):
-    assert query_parser.parse_query('name:"foo bar"') == ("XNAMEfoo bar",)
+    assert query_to_tuple(query_parser.parse_query('name:"foo bar"')) == (
+        LEAF_TERM,
+        "XNAMEfoo bar",
+    )
 
 
 def test_wildcard(query_parser):
     query_parser.wildcard_field = "name"
-    assert query_parser.parse_query("fo*") == (
-        WILDCARD,
-        "XNAMEfo",
-        0,
-        xapian.Query.WILDCARD_LIMIT_FIRST,
+    assert (
+        query_to_str(query_parser.parse_query("fo*"))
+        == "Query(WILDCARD SYNONYM XNAMEfo)"
     )
-    assert query_parser.parse_query("name:fo*") == (
-        WILDCARD,
-        "XNAMEfo",
-        0,
-        xapian.Query.WILDCARD_LIMIT_FIRST,
+    assert (
+        query_to_str(query_parser.parse_query("name:fo*"))
+        == "Query(WILDCARD SYNONYM XNAMEfo)"
     )
-    assert query_parser.parse_query("name:foo.b*") == (
-        WILDCARD,
-        "XNAMEfoo.b",
-        0,
-        xapian.Query.WILDCARD_LIMIT_FIRST,
+    assert (
+        query_to_str(query_parser.parse_query("name:foo.b*"))
+        == "Query(WILDCARD SYNONYM XNAMEfoo.b)"
     )
 
 
 def test_wildcard_with_no_wildcard_field(query_parser):
     query_parser.wildcard_field = None
-    assert query_parser.parse_query("fo*") == ()
-    assert query_parser.parse_query("name:fo*") == (
-        WILDCARD,
-        "XNAMEfo",
-        0,
-        xapian.Query.WILDCARD_LIMIT_FIRST,
+    assert query_to_str(query_parser.parse_query("fo*")) == "Query()"
+    assert (
+        query_to_str(query_parser.parse_query("name:fo*"))
+        == "Query(WILDCARD SYNONYM XNAMEfo)"
     )
 
 
 def test_auto_wildcard(query_parser):
     query_parser.wildcard_field = "name"
     query_parser.auto_wildcard = True
-    assert query_parser.parse_query("fo") == (
-        WILDCARD,
-        "XNAMEfo",
-        0,
-        xapian.Query.WILDCARD_LIMIT_FIRST,
+    assert (
+        query_to_str(query_parser.parse_query("fo"))
+        == "Query(WILDCARD SYNONYM XNAMEfo)"
     )
-    assert query_parser.parse_query("name:fo") == ("XNAMEfo",)
+    assert (
+        query_to_str(query_parser.parse_query("name:fo")) == "Query(XNAMEfo)"
+    )
 
 
 def test_intrange(query_parser):
@@ -168,27 +215,21 @@ def test_intrange(query_parser):
     )
     query_parser.default_fields = ["value"]
 
-    assert query_parser.parse_query("123..456") == (
-        VALUE_RANGE,
-        slot,
-        schema["value"].preprocess_value(123),
-        schema["value"].preprocess_value(456),
+    assert (
+        query_to_str(query_parser.parse_query("123..456"))
+        == "Query(VALUE_RANGE 99928 \\xbb\\xb0 \\xc7 )"
     )
-    assert query_parser.parse_query("..987") == (
-        VALUE_LE,
-        slot,
-        schema["value"].preprocess_value(987),
+    assert (
+        query_to_str(query_parser.parse_query("..987"))
+        == "Query(VALUE_LE 99928 ˶)"
     )
-    assert query_parser.parse_query("369..") == (
-        VALUE_GE,
-        slot,
-        schema["value"].preprocess_value(369),
+    assert (
+        query_to_str(query_parser.parse_query("369.."))
+        == "Query(VALUE_GE 99928 \\xc5\\xc4)"
     )
-    assert query_parser.parse_query("369") == (
-        VALUE_RANGE,
-        slot,
-        schema["value"].preprocess_value(369),
-        schema["value"].preprocess_value(369),
+    assert (
+        query_to_str(query_parser.parse_query("369"))
+        == "Query(VALUE_RANGE 99928 \\xc5\\xc4 \\xc5\\xc4)"
     )
 
     query_parser.schema = schema = Schema(
@@ -198,31 +239,21 @@ def test_intrange(query_parser):
         ]
     )
 
-    assert query_parser.parse_query("value:..12346") == (
-        VALUE_LE,
-        slot,
-        schema["value"].preprocess_value(12346),
+    assert (
+        query_to_str(query_parser.parse_query("value:..12346"))
+        == "Query(VALUE_LE 99928 \\xda\\x07@)"
     )
-    assert query_parser.parse_query("value:99182") == (
-        VALUE_RANGE,
-        slot,
-        schema["value"].preprocess_value(99182),
-        schema["value"].preprocess_value(99182),
+    assert (
+        query_to_str(query_parser.parse_query("value:99182"))
+        == "Query(VALUE_RANGE 99928 \\xe0&\\x0d\\xb8 \\xe0&\\x0d\\xb8)"
     )
-    assert query_parser.parse_query("val:..12346") == ()
+    assert query_to_str(query_parser.parse_query("val:..12346")) == "Query()"
 
-    assert query_parser.parse_query("value:..12346 AND other_value:10..") == (
-        AND,
-        (
-            VALUE_LE,
-            slot,
-            schema["value"].preprocess_value(12346),
-        ),
-        (
-            VALUE_GE,
-            slot + 1,
-            schema["other_value"].preprocess_value(10),
-        ),
+    assert (
+        query_to_str(
+            query_parser.parse_query("value:..12346 AND other_value:10..")
+        )
+        == "Query((VALUE_LE 99928 \\xda\\x07@ AND VALUE_GE 99929 \\xad))"
     )
 
 
@@ -234,21 +265,37 @@ def test_path_field(query_parser):
         ]
     )
 
-    assert query_parser.parse_query("name:BAR") == ("XNAMEbar",)
-    assert query_parser.parse_query("path:FOO") == ("XPATHFOO",)
+    assert query_to_tuple(query_parser.parse_query("name:BAR")) == (
+        LEAF_TERM,
+        "XNAMEbar",
+    )
+    assert query_to_tuple(query_parser.parse_query("path:FOO")) == (
+        LEAF_TERM,
+        "XPATHFOO",
+    )
 
     query_parser.default_fields = ["name", "path"]
-    assert query_parser.parse_query("FOO") == (
+    assert query_to_tuple(query_parser.parse_query("FOO")) == (
         OR,
-        [("XNAMEfoo",), ("XPATHFOO",)],
+        (
+            LEAF_TERM,
+            "XNAMEfoo",
+        ),
+        (
+            LEAF_TERM,
+            "XPATHFOO",
+        ),
     )
 
 
 def test_single_term_no_default_fields(query_parser):
     query_parser.default_fields = []
-    assert query_parser.parse_query("foo") == (OR, [])
-    assert query_parser.parse_query('"foo bar"') == (OR, [])
-    assert query_parser.parse_query("name:foo") == ("XNAMEfoo",)
+    assert query_to_tuple(query_parser.parse_query("foo")) == EMPTY_MATCH
+    assert query_to_tuple(query_parser.parse_query('"foo bar"')) == EMPTY_MATCH
+    assert query_to_tuple(query_parser.parse_query("name:foo")) == (
+        LEAF_TERM,
+        "XNAMEfoo",
+    )
 
 
 def test_field_with_no_value(query_parser):
@@ -260,25 +307,25 @@ def test_field_with_no_value(query_parser):
         [DatabaseField("name", "XNAME"), DatabaseField("path", "XPATH")]
     )
     query_parser.ignore_missing_field_values = True
-    assert query_parser.parse_query("name: path:baz") == (
-        AND,
-        (),
-        ("XPATHbaz",),
+    assert (
+        query_to_tuple(query_parser.parse_query("name: path:baz"))
+        == EMPTY_MATCH
     )
-    assert query_parser.parse_query("name: OR path:baz") == ("XPATHbaz",)
+    assert query_to_tuple(query_parser.parse_query("name: OR path:baz")) == (
+        LEAF_TERM,
+        "XPATHbaz",
+    )
 
 
 def test_unknown_field(query_parser):
-    assert query_parser.parse_query("unknown:text") == ()
-    assert query_parser.parse_query("name:foo unknown:text name:bar") == (
-        AND,
-        ("XNAMEfoo",),
-        (
-            AND,
-            # Matches nothing, so the whole query will match nothing.
-            (),
-            ("XNAMEbar",),
-        ),
+    assert (
+        query_to_tuple(query_parser.parse_query("unknown:text")) == EMPTY_MATCH
+    )
+    assert (
+        query_to_tuple(
+            query_parser.parse_query("name:foo unknown:text name:bar")
+        )
+        == EMPTY_MATCH
     )
 
 
@@ -291,52 +338,94 @@ def test_multiple_default_fields(query_parser):
         ]
     )
     query_parser.default_fields = ["name", "full_name"]
-    assert query_parser.parse_query("foo") == (
+    assert query_to_tuple(query_parser.parse_query("foo")) == (
         OR,
-        [
-            ("XNAMEfoo",),
-            ("XFULLNAMEfoo",),
-        ],
+        (
+            LEAF_TERM,
+            "XNAMEfoo",
+        ),
+        (
+            LEAF_TERM,
+            "XFULLNAMEfoo",
+        ),
     )
-    assert query_parser.parse_query('"foo bar"') == (
+    assert query_to_tuple(query_parser.parse_query('"foo bar"')) == (
         OR,
-        [
-            ("XNAMEfoo bar",),
-            ("XFULLNAMEfoo bar",),
-        ],
+        (
+            LEAF_TERM,
+            "XNAMEfoo bar",
+        ),
+        (
+            LEAF_TERM,
+            "XFULLNAMEfoo bar",
+        ),
     )
 
 
 def test_ignores_invalid_tokens(query_parser):
     query_parser.ignore_unknown_tokens = True
-    assert query_parser.parse_query("  /~?# foo ?$@#  ") == ("XNAMEfoo",)
-    assert query_parser.parse_query("  !/~?# foo ?$@#  ") == (
+    assert query_to_tuple(query_parser.parse_query("  /~?# foo ?$@#  ")) == (
+        LEAF_TERM,
+        "XNAMEfoo",
+    )
+    assert query_to_tuple(query_parser.parse_query("  !/~?# foo ?$@#  ")) == (
         AND_NOT,
         MATCH_ALL,
-        ("XNAMEfoo",),
+        (
+            LEAF_TERM,
+            "XNAMEfoo",
+        ),
     )
-    assert query_parser.parse_query("  #name://foo//  ") == ("XNAMEfoo",)
-    assert query_parser.parse_query("  #name://foo//bar  ") == (
+    assert query_to_tuple(query_parser.parse_query("  #name://foo//  ")) == (
+        LEAF_TERM,
+        "XNAMEfoo",
+    )
+    assert query_to_tuple(
+        query_parser.parse_query("  #name://foo//bar  ")
+    ) == (
         AND,
-        ("XNAMEfoo",),
-        ("XNAMEbar",),
+        (
+            LEAF_TERM,
+            "XNAMEfoo",
+        ),
+        (
+            LEAF_TERM,
+            "XNAMEbar",
+        ),
     )
-    assert query_parser.parse_query("~@#$%^&*foo+*&^%$#@~") == ("XNAMEfoo",)
+    assert query_to_tuple(
+        query_parser.parse_query("~@#$%^&*foo+*&^%$#@~")
+    ) == (
+        LEAF_TERM,
+        "XNAMEfoo",
+    )
 
 
 def test_or(query_parser):
-    assert query_parser.parse_query("foo OR bar") == (
+    assert query_to_tuple(query_parser.parse_query("foo OR bar")) == (
         OR,
-        ("XNAMEfoo",),
-        ("XNAMEbar",),
+        (
+            LEAF_TERM,
+            "XNAMEfoo",
+        ),
+        (
+            LEAF_TERM,
+            "XNAMEbar",
+        ),
     )
 
 
 def test_and(query_parser):
-    assert query_parser.parse_query("foo AND bar") == (
+    assert query_to_tuple(query_parser.parse_query("foo AND bar")) == (
         AND,
-        ("XNAMEfoo",),
-        ("XNAMEbar",),
+        (
+            LEAF_TERM,
+            "XNAMEfoo",
+        ),
+        (
+            LEAF_TERM,
+            "XNAMEbar",
+        ),
     )
 
 
@@ -364,39 +453,80 @@ def test_operand_missing(query_parser):
 
 
 def test_parens(query_parser):
-    assert query_parser.parse_query("()") == ()
-    assert query_parser.parse_query("(())") == ()
-    assert query_parser.parse_query("(foo)") == ("XNAMEfoo",)
-    assert query_parser.parse_query("((foo))") == ("XNAMEfoo",)
-    assert query_parser.parse_query("((foo) bar)") == (
-        AND,
-        ("XNAMEfoo",),
-        ("XNAMEbar",),
+    assert query_to_tuple(query_parser.parse_query("()")) == EMPTY_MATCH
+    assert query_to_tuple(query_parser.parse_query("(())")) == EMPTY_MATCH
+    assert query_to_tuple(query_parser.parse_query("(foo)")) == (
+        LEAF_TERM,
+        "XNAMEfoo",
     )
-    assert query_parser.parse_query("foo ()") == ("XNAMEfoo",)
-    assert query_parser.parse_query("foo () bar") == (
+    assert query_to_tuple(query_parser.parse_query("((foo))")) == (
+        LEAF_TERM,
+        "XNAMEfoo",
+    )
+    assert query_to_tuple(query_parser.parse_query("((foo) bar)")) == (
         AND,
-        ("XNAMEfoo",),
-        ("XNAMEbar",),
+        (
+            LEAF_TERM,
+            "XNAMEfoo",
+        ),
+        (
+            LEAF_TERM,
+            "XNAMEbar",
+        ),
+    )
+    assert query_to_tuple(query_parser.parse_query("foo ()")) == (
+        LEAF_TERM,
+        "XNAMEfoo",
+    )
+    assert query_to_tuple(query_parser.parse_query("foo () bar")) == (
+        AND,
+        (
+            LEAF_TERM,
+            "XNAMEfoo",
+        ),
+        (
+            LEAF_TERM,
+            "XNAMEbar",
+        ),
     )
 
-    assert query_parser.parse_query("foo AND bar OR baz") == (
+    assert query_to_tuple(query_parser.parse_query("foo AND bar OR baz")) == (
         OR,
         (
             AND,
-            ("XNAMEfoo",),
-            ("XNAMEbar",),
+            (
+                LEAF_TERM,
+                "XNAMEfoo",
+            ),
+            (
+                LEAF_TERM,
+                "XNAMEbar",
+            ),
         ),
-        ("XNAMEbaz",),
+        (
+            LEAF_TERM,
+            "XNAMEbaz",
+        ),
     )
 
-    assert query_parser.parse_query("foo AND (bar OR baz)") == (
+    assert query_to_tuple(
+        query_parser.parse_query("foo AND (bar OR baz)")
+    ) == (
         AND,
-        ("XNAMEfoo",),
+        (
+            LEAF_TERM,
+            "XNAMEfoo",
+        ),
         (
             OR,
-            ("XNAMEbar",),
-            ("XNAMEbaz",),
+            (
+                LEAF_TERM,
+                "XNAMEbar",
+            ),
+            (
+                LEAF_TERM,
+                "XNAMEbaz",
+            ),
         ),
     )
 
