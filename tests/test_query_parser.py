@@ -1,8 +1,9 @@
 import pytest
 import xapian
+from pytest import fixture
+
 from bdx.index import DatabaseField, IntegerField, PathField, Schema
 from bdx.query_parser import QueryParser
-from pytest import fixture
 
 AND = xapian.Query.OP_AND
 OR = xapian.Query.OP_OR

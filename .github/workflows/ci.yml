@@ -56,5 +56,8 @@ jobs:
       - name: Lint
         run: make lint
 
+      - name: Check formatting
+        run: make checkformat
+
       - name: Tests
         run: make check
