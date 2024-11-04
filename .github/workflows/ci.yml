@@ -21,12 +21,37 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: set up python ${{ matrix.python-version }}
+      - name: Set up python ${{ matrix.python-version }}
         uses: actions/setup-python@master
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install xapian
+      - name: Download xapian sources
+        run: |
+          sudo mkdir -p -m 777 /usr/local/src/xapian
+          sudo mkdir -p -m 777 /usr/local/src/xapian-bindings
+          VERSION=1.4.26
+          wget https://oligarchy.co.uk/xapian/$VERSION/xapian-core-$VERSION.tar.xz
+          wget https://oligarchy.co.uk/xapian/$VERSION/xapian-bindings-$VERSION.tar.xz
+          tar -C /usr/local/src/xapian --strip-components=1 -xvaf xapian-core*.tar.xz
+          tar -C /usr/local/src/xapian-bindings --strip-components=1 -xvaf xapian-bindings*.tar.xz
+
+      - name: Cache xapian
+        id: cache-xapian
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/src/xapian/build
+          key: ${{ runner.os }}-xapian-${{ hashFiles('**/xapian*.tar.xz') }}
+
+      - name: Cache xapian-bindings
+        id: cache-xapian-bindings
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/src/xapian-bindings/build
+          key: ${{ runner.os }}-${{ matrix.python-version }}-xapian-${{ hashFiles('**/xapian*.tar.xz') }}
+
+      - name: Set up build system
+        if: steps.cache-xapian.outputs.cache-hit != 'true' || steps.cache-xapian-bindings.outputs.cache-hit != 'true'
         run: |
           # Ubuntu<24
           test -e /etc/apt/sources.list && \
@@ -35,20 +60,39 @@ jobs:
           sudo sed -i 's/^Types: deb/Types: deb deb-src/' /etc/apt/sources.list.d/*
 
           sudo apt-get update
-          sudo apt-get install wget xz-utils build-essential zlib1g-dev
+          sudo apt-get install build-essential zlib1g-dev
           sudo apt-get build-dep libxapian-dev
-          cd /usr/local/src
-          sudo mkdir -m 777 xapian
-          cd xapian
-          wget https://oligarchy.co.uk/xapian/1.4.26/xapian-core-1.4.26.tar.xz
-          tar -xvaf xapian*.tar.xz
-          cd xapian*/
-          ./configure --prefix=/usr
+
+      - name: Build xapian
+        if: steps.cache-xapian.outputs.cache-hit != 'true'
+        run: |
+          cd /usr/local/src/xapian
+          mkdir build
+          cd build
+          ../configure --prefix=/usr
           make -j 12
+
+      - name: Install xapian
+        run: |
+          cd /usr/local/src/xapian/build/
           sudo make install
 
-      - name: Install xapian-bindings
-        run: VIRTUAL_ENV=$Python_ROOT_DIR ./install_xapian_bindings.sh
+      - name: Build xapian bindings
+        if: steps.cache-xapian-bindings.outputs.cache-hit != 'true'
+        run: |
+          cd /usr/local/src/xapian-bindings
+          mkdir build
+          cd build
+          ../configure --with-python3 --prefix=/usr
+          make -j 12
+
+      - name: Install xapian bindings
+        run: |
+          # Install prerequisites for xapian-bindings.
+          # https://github.com/sphinx-doc/sphinx/issues/6524
+          pip install Sphinx
+          cd /usr/local/src/xapian-bindings/build/
+          sudo make install
 
       - name: Install the project
         run: pip install -e .[dev]
