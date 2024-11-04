@@ -102,7 +102,9 @@ class BinaryDirectory:
         if self.use_compilation_database:
             yield from self._find_files_from_compilation_database()
         else:
-            yield from self.path.rglob("*.o")
+            for file in self.path.rglob("*.o"):
+                if is_readable_elf_file(file):
+                    yield file
 
     def _find_files_from_compilation_database(self) -> Iterator[Path]:
         path = find_compilation_database(self.path)
