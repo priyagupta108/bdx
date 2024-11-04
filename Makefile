@@ -7,10 +7,10 @@ black-check:
 	${PYTHON} -m black --check bdx/ tests/
 
 isort:
-	${PYTHON} -m isort -i bdx/*.py tests/*.py
+	${PYTHON} -m isort bdx/*.py tests/*.py
 
 isort-check:
-	${PYTHON} -m isort --check -i bdx/*.py tests/*.py
+	${PYTHON} -m isort --check bdx/*.py tests/*.py
 
 format: black isort
 
