@@ -4,12 +4,13 @@ import json
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
+from functools import cached_property
 from pathlib import Path
 from typing import Iterator, Optional
 
 from elftools.elf.elffile import ELFFile
 
-from bdx import debug, trace
+from bdx import info, trace
 
 
 @dataclass(frozen=True)
@@ -79,6 +80,14 @@ class BinaryDirectory:
     class CompilationDatabaseNotFoundError(FileNotFoundError):
         """Could not find the compilation database."""
 
+    @cached_property
+    def compilation_database(self):
+        """The nearest compilation database for this directory."""
+        compdb = find_compilation_database(self.path)
+        if compdb is not None:
+            info("Found compilation database: {}", compdb)
+        return compdb
+
     def changed_files(self) -> Iterator[Path]:
         """Yield files that were changed/created since last run."""
         files = set(self._find_files())
@@ -119,15 +128,13 @@ class BinaryDirectory:
                     trace("{}: Ignoring, Not a readable ELF file", file)
 
     def _find_files_from_compilation_database(self) -> Iterator[Path]:
-        path = find_compilation_database(self.path)
+        path = self.compilation_database
         if not path:
             msg = (
                 f"compile_commands.json file not found in {path} "
                 "or any of the parent directories"
             )
             raise BinaryDirectory.CompilationDatabaseNotFoundError(msg)
-
-        debug("Found compilation database: {}", path)
 
         with open(path, "r") as f:
             data = json.load(f)
