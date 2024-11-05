@@ -206,7 +206,7 @@ def test_auto_wildcard(query_parser):
 
 def test_intrange(query_parser):
     slot = 99928
-    query_parser.schema = schema = Schema(
+    query_parser.schema = Schema(
         [
             IntegerField("value", "XV", slot=slot),
         ]
@@ -230,7 +230,7 @@ def test_intrange(query_parser):
         == "Query(VALUE_RANGE 99928 \\xc5\\xc4 \\xc5\\xc4)"
     )
 
-    query_parser.schema = schema = Schema(
+    query_parser.schema = Schema(
         [
             IntegerField("value", "XV", slot=slot),
             IntegerField("other_value", "XV2", slot=slot + 1),

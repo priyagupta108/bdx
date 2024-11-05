@@ -4,7 +4,7 @@ from typing import Optional
 
 import xapian
 
-from bdx.index import IntegerField, Schema
+from bdx.index import Schema
 
 
 class Token(Enum):
@@ -21,7 +21,6 @@ class Token(Enum):
     Or = "OR"
     Not = "NOT"
     Wildcard = "WILDCARD"
-    Intrange = "INTRANGE"
 
     @staticmethod
     def patterns() -> list[tuple["Token", re.Pattern]]:
@@ -36,8 +35,7 @@ class Token(Enum):
             (Token.String, re.compile(r'"([^"]+)"')),
             (Token.Field, re.compile(r"([a-zA-Z_]+):")),
             (Token.Wildcard, re.compile(r"([a-zA-Z_][a-zA-Z0-9_.]*)[*]")),
-            (Token.Intrange, re.compile(r"(([0-9]+)?\.\.([0-9]+)?|([0-9]+))")),
-            (Token.Term, re.compile(r"([a-zA-Z_][a-zA-Z0-9_.]*)")),
+            (Token.Term, re.compile(r"([a-zA-Z0-9_.]+)")),
         ]
 
 
@@ -69,14 +67,13 @@ class QueryParser:
     #         | "(" query ")"
     #         | [ field ] value
     #
-    # value = term | string | wildcard | intrange
+    # value = term | string | wildcard
     #
     # NOT = NOT|!
     # field = [a-zA-Z_]+ ":"
-    # term = [a-zA-Z_][a-zA-Z0-9_.]*
     # string = '"' [^"]+ '"'
-    # wildcard = [a-zA-Z_][a-zA-Z0-9_.]*[*]
-    # intrange = (([0-9]+)?[.][.]([0-9]+)?|[0-9]+
+    # wildcard = [a-zA-Z0-9_.]*[*]
+    # term = [a-zA-Z0-9_.]*
 
     def __init__(
         self,
@@ -246,8 +243,6 @@ class QueryParser:
             retval = self._parse_string()
         elif self._token == Token.Wildcard:
             retval = self._parse_wildcard()
-        elif self._token == Token.Intrange:
-            retval = self._parse_intrange()
         elif self._token == Token.Field:
             field = self._value
             self._parse_field()
@@ -257,7 +252,6 @@ class QueryParser:
                 Token.Term,
                 Token.String,
                 Token.Wildcard,
-                Token.Intrange,
             ]
             ignore_missing_values = self.ignore_missing_field_values
 
@@ -312,21 +306,6 @@ class QueryParser:
         self._parsed = query
         return True
 
-    def _parse_intrange(self):
-        self._expect(Token.Intrange, "intrange")
-
-        subqueries = []
-        for field in self.default_fields:
-            schema_field = self.schema[field]
-            if not isinstance(schema_field, IntegerField):
-                continue
-            subquery = schema_field.make_query(self._value)
-            subqueries.append(subquery)
-
-        self._next_token()
-        self._parsed = self._merge_queries(subqueries)
-        return True
-
     def _parse_string(self):
         self._expect(Token.String, "string")
         value = self._value
@@ -345,7 +324,7 @@ class QueryParser:
 
     def _parse_field_with_value(self, field):
         self._expect(
-            [Token.Term, Token.String, Token.Wildcard, Token.Intrange],
+            [Token.Term, Token.String, Token.Wildcard],
             f'value for field "{field}"',
         )
 
@@ -353,8 +332,7 @@ class QueryParser:
 
         self._parsed = schema_field.make_query(
             self._value,
-            wildcard=self._token == Token.Wildcard
-            and not isinstance(schema_field, IntegerField),
+            wildcard=self._token == Token.Wildcard,
         )
 
         self._next_token()
