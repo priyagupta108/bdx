@@ -95,10 +95,10 @@ class BinaryDirectory:
 
     def changed_files(self) -> Iterator[Path]:
         """Yield files that were changed/created since last run."""
-        files = set(self._file_list)
+        files = self._file_list
         previous_state = set(self.previous_file_list)
 
-        for path in files:
+        for path in sorted(files):
             mtime = datetime.fromtimestamp(path.stat().st_mtime)
             is_new = path not in previous_state
             is_changed = not is_new and self.last_mtime < mtime
@@ -120,7 +120,7 @@ class BinaryDirectory:
         previous_state = set(self.previous_file_list)
 
         deleted = previous_state.difference(files)
-        yield from deleted
+        yield from sorted(deleted)
 
     def _find_files(self) -> Iterator[Path]:
         if self.use_compilation_database:

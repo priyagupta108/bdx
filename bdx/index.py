@@ -605,6 +605,9 @@ def index_binary_directory(
         changed_files = list(bdir.changed_files())
         deleted_files = list(bdir.deleted_files())
 
+        changed_files.sort()
+        deleted_files.sort()
+
         stats.num_files_changed = len(changed_files)
         stats.num_files_deleted = len(deleted_files)
 
