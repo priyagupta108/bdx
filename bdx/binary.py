@@ -77,8 +77,13 @@ class BinaryDirectory:
     previous_file_list: list[Path] = field(repr=False, default_factory=list)
     use_compilation_database: bool = False
 
+    _file_list: list[Path] = field(repr=False, default_factory=list)
+
     class CompilationDatabaseNotFoundError(FileNotFoundError):
         """Could not find the compilation database."""
+
+    def __post_init__(self):
+        self._file_list.extend(self._find_files())
 
     @cached_property
     def compilation_database(self):
@@ -90,7 +95,7 @@ class BinaryDirectory:
 
     def changed_files(self) -> Iterator[Path]:
         """Yield files that were changed/created since last run."""
-        files = set(self._find_files())
+        files = set(self._file_list)
         previous_state = set(self.previous_file_list)
 
         for path in files:
@@ -111,7 +116,7 @@ class BinaryDirectory:
 
     def deleted_files(self) -> Iterator[Path]:
         """Yield files that were deleted since last run."""
-        files = set(self._find_files())
+        files = set(self._file_list)
         previous_state = set(self.previous_file_list)
 
         deleted = previous_state.difference(files)
