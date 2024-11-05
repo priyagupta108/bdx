@@ -174,6 +174,32 @@ class PathField(DatabaseField):
 class SymbolNameField(TextField):
     """DatabaseField that indexes symbol names specially."""
 
+    @staticmethod
+    def tokenize_value(value: str) -> set[str]:
+        """Split given value into tokens for indexing."""
+        letters_only = re.findall("[a-zA-Z]{2,}", value)
+
+        # Split "CamelCaseWord" into "Camel Case Word"
+        camel_case_words = re.findall("[A-Z][a-z]+", " ".join(letters_only))
+
+        # Find uppercase words
+        upper_case_words = re.findall("[A-Z]{2,}", " ".join(letters_only))
+
+        numbers = re.findall("[0-9]+", value)
+        words_with_numbers = re.findall("[a-zA-Z]+[0-9]+", value)
+
+        tokens = set()
+        for tokenlist in [
+            letters_only,
+            camel_case_words,
+            upper_case_words,
+            numbers,
+            words_with_numbers,
+        ]:
+            tokens.update(tokenlist)
+
+        return set(tokens)
+
     def index(self, document, value: Any):
         """Index ``value`` in the ``document``."""
         DatabaseField.index(self, document, value)
@@ -181,17 +207,9 @@ class SymbolNameField(TextField):
         if isinstance(value, bytes):
             value = value.decode()
 
-        # Only index letters
-        value = re.sub("[^a-zA-Z]+", " ", value)
+        tokens = self.tokenize_value(value)
+        value = " ".join(tokens)
 
-        # Split CamelCase into words
-        value += re.sub("([A-Z]+)", " \\1", value)
-
-        # Split into lowercase words
-        value += re.sub("([A-Z]+)", " ", value)
-
-        # Remove duplicates
-        value = " ".join(set(value.split()))
         super().index(document, value)
 
 
