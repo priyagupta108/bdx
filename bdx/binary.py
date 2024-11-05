@@ -9,6 +9,8 @@ from typing import Iterator, Optional
 
 from elftools.elf.elffile import ELFFile
 
+from bdx import debug, trace
+
 
 @dataclass(frozen=True)
 class Symbol:
@@ -87,6 +89,14 @@ class BinaryDirectory:
             is_new = path not in previous_state
             is_changed = not is_new and self.last_mtime < mtime
 
+            trace(
+                "{}: is_new={} is_changed={} mtime={}",
+                path,
+                is_new,
+                is_changed,
+                mtime,
+            )
+
             if is_new or is_changed:
                 yield path
 
@@ -105,6 +115,8 @@ class BinaryDirectory:
             for file in self.path.rglob("*.o"):
                 if is_readable_elf_file(file):
                     yield file
+                else:
+                    trace("{}: Ignoring, Not a readable ELF file", file)
 
     def _find_files_from_compilation_database(self) -> Iterator[Path]:
         path = find_compilation_database(self.path)
@@ -115,31 +127,39 @@ class BinaryDirectory:
             )
             raise BinaryDirectory.CompilationDatabaseNotFoundError(msg)
 
+        debug("Found compilation database: {}", path)
+
         with open(path, "r") as f:
             data = json.load(f)
 
         for entry in data:
             directory = Path(entry.get("directory", path.parent))
             file = None
+            source_file = Path(entry["file"])
+            trace("For source file {}", source_file)
 
             if "output" in entry:
                 file = Path(entry["output"])
+                trace("  Found binary file in 'output': {}", file)
             elif "command" in entry:
                 command = entry["command"]
                 match = re.match(".* -o *([^ ]+).*", command)
                 if match:
                     file = Path(match.group(1))
+                    trace("  Found binary file in 'command': {}", file)
             elif "arguments" in entry:
                 args = entry["arguments"]
                 for prev, next in zip(args, args[1:]):
                     if prev == "-o":
                         file = Path(next)
+                        trace("  Found binary file in 'arguments': {}", file)
                         break
 
             if not file:
-                filename = Path(entry["file"]).stem
-                file = directory / (filename + ".o")
+                file = directory / (source_file.stem + ".o")
+                trace("  Assuming {} is binary", file)
             if not file.is_absolute():
                 file = directory / file
+
             if is_readable_elf_file(file):
                 yield file

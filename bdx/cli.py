@@ -4,11 +4,13 @@ import json
 from dataclasses import asdict
 from functools import wraps
 from pathlib import Path
-from sys import exit, stderr, stdout
+from sys import exit, stdout
 from typing import Optional
 
 import click
 
+import bdx
+from bdx import debug, error, info, log
 from bdx.binary import BinaryDirectory, Symbol, find_compilation_database
 from bdx.index import SymbolIndex, index_binary_directory, search_index
 from bdx.query_parser import QueryParser
@@ -76,6 +78,15 @@ def _common_options(index_must_exist=False):
             ),
             help="Path to the index.  By default, it is located in ~/.cache.",
         )
+        @click.option(
+            "-v",
+            "--verbose",
+            count=True,
+            help=(
+                "Be verbose.  Can be provided multiple times "
+                " for increased verbosity."
+            ),
+        )
         @click.pass_context
         @wraps(f)
         def inner(
@@ -83,6 +94,7 @@ def _common_options(index_must_exist=False):
             *args,
             directory: str | Path,
             index_path: str | Path,
+            verbose: int,
             **kwargs,
         ):
             did_guess_directory = False
@@ -112,11 +124,13 @@ def _common_options(index_must_exist=False):
                 msg = f"Directory is not indexed: {directory}"
                 raise click.BadParameter(msg)
 
+            bdx.VERBOSITY = verbose
+
             if did_guess_directory:
-                click.echo(
-                    f"note: Using {directory} as binary directory",
-                    file=stderr,
-                )
+                info(f"note: Using {directory} as binary directory")
+
+            debug("Binary directory: {}", str(directory.absolute()))
+            debug("PWD: {}", str(Path().absolute()))
 
             f(*args, directory, index_path, **kwargs)
 
@@ -143,15 +157,15 @@ def index(directory, index_path, use_compilation_database):
             use_compilation_database,
         )
     except BinaryDirectory.CompilationDatabaseNotFoundError as e:
-        click.echo(f"error: {e}", file=stderr)
+        error(str(e))
         exit(1)
 
-    click.echo(
+    log(
         f"Files indexed: {stats.num_files_indexed} "
         f"(out of {stats.num_files_changed} changed files)"
     )
-    click.echo(f"Files removed from index: {stats.num_files_deleted}")
-    click.echo(f"Symbols indexed: {stats.num_symbols_indexed}")
+    log(f"Files removed from index: {stats.num_files_deleted}")
+    log(f"Symbols indexed: {stats.num_symbols_indexed}")
 
 
 @cli.command()
@@ -207,8 +221,10 @@ def search(_directory, index_path, query, num, format):
             try:
                 print(fmt.format(**data))
             except (KeyError, ValueError, TypeError):
-                click.echo(f"Invalid format: '{fmt}'", file=stderr)
-                click.echo(f"Available keys: {list(data.keys())}", file=stderr)
+                error(
+                    f"Invalid format: '{fmt}'\n"
+                    f"Available keys: {list(data.keys())}"
+                )
                 exit(1)
 
     try:
@@ -219,7 +235,7 @@ def search(_directory, index_path, query, num, format):
             consumer=callback,
         )
     except QueryParser.Error as e:
-        click.echo(f"Invalid query: {str(e)}")
+        error(f"Invalid query: {str(e)}")
         exit(1)
 
 

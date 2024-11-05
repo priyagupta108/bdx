@@ -5,7 +5,6 @@ import os
 import pickle
 import re
 import signal
-import sys
 from collections.abc import Mapping
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
@@ -16,6 +15,7 @@ from typing import Any, Callable, Dict, Iterator, List, Optional
 import xapian
 from tqdm import tqdm
 
+from bdx import debug, detail_log, log, trace
 from bdx.binary import BinaryDirectory, Symbol, read_symtable
 
 MAX_TERM_SIZE = 244
@@ -288,6 +288,8 @@ class SymbolIndex:
                   otherwise the database will be read-only.
 
         """
+        debug("Opening index: {}", path)
+
         if not readonly:
             path.mkdir(exist_ok=True, parents=True)
 
@@ -325,6 +327,10 @@ class SymbolIndex:
         if not readonly:
             self.set_metadata("__schema__", pickle.dumps(schema))
 
+        debug("Index has saved binary directory: {}", self.binary_dir())
+        debug("Index mtime: {}", self.mtime())
+        trace("Index schema: {}", self._schema)
+
     @staticmethod
     def default_path(directory: Path | str) -> Path:
         """Return a default index path for binary ``directory``."""
@@ -347,6 +353,7 @@ class SymbolIndex:
 
     def close(self):
         """Close this SymbolIndex."""
+        debug("Closing index: {}", self.path)
         self._live_db().close()
         self._db = None
 
@@ -401,6 +408,7 @@ class SymbolIndex:
     def transaction(self):
         """Return a context manager for transactions in this SymbolIndex."""
         try:
+            trace("Begin transaction")
             self._live_writable_db().begin_transaction()
         except xapian.InvalidOperationError as e:
             msg = "Already inside a transaction"
@@ -408,8 +416,10 @@ class SymbolIndex:
 
         try:
             yield None
+            trace("Commit transaction")
             self._live_writable_db().commit_transaction()
         except Exception:
+            trace("Cancel transaction")
             self._live_writable_db().cancel_transaction()
             raise
 
@@ -462,6 +472,8 @@ class SymbolIndex:
 
         if isinstance(query, str):
             query = self._parse_query(query)
+
+        debug("Search query: {}", query)
 
         enquire = xapian.Enquire(db)
         enquire.set_query(query)
@@ -525,7 +537,7 @@ def sigint_catcher() -> Iterator[Callable[[], bool]]:
     def handler(*_args):
         nonlocal called
         called = True
-        print("Interrupted, press C-c again to exit", file=sys.stderr)
+        log("Interrupted, press C-c again to exit")
         signal.signal(signal.SIGINT, original_handler)
 
     def checker():
@@ -543,18 +555,24 @@ def _read_and_serialize_symtable(file: Path) -> list[bytes]:
     try:
         symtab = read_symtable(file)
     except Exception as e:
-        print(
-            f"{file.name}: {e.__class__.__name__}: {str(e)}", file=sys.stderr
-        )
+        log("{}: {}: {}", file.name, e.__class__.__name__, str(e))
         return []
 
     for symbol in symtab:
+        detail_log(
+            "Got symbol '{}' in {}, section '{}', size {}",
+            symbol.name,
+            symbol.path,
+            symbol.section,
+            symbol.size,
+        )
         if symbol.size == 0:
             # TODO: Add an option to also index 0-size symbols
             continue
         ret.append(SymbolIndex.serialize_symbol(symbol))
 
     if not ret:
+        trace("{}: No symbols found", file)
         # Add a single document if there are no symbols.  Otherwise,
         # we would always treat it as unindexed.
         ret.append(SymbolIndex.serialize_symbol(Symbol(file, "", "", 0)))
@@ -591,6 +609,11 @@ def index_binary_directory(
         stats.num_files_changed = len(changed_files)
         stats.num_files_deleted = len(deleted_files)
 
+        for file in changed_files:
+            debug("File modified: {}", file)
+        for file in deleted_files:
+            debug("File deleted: {}", file)
+
         with (
             sigint_catcher() as interrupted,
             mp.Pool() as pool,
@@ -611,17 +634,21 @@ def index_binary_directory(
             max_mtime = mtime
 
             for path, serialized_docs in iterator:
+                num = len(serialized_docs)
+                trace("{}: Adding {} symbol(s) to index", path, num)
+
                 for doc in serialized_docs:
                     index.add_serialized_document(doc)
+
                 stats.num_files_indexed += 1
-                stats.num_symbols_indexed += len(serialized_docs)
+                stats.num_symbols_indexed += num
 
                 mtime = datetime.fromtimestamp(path.stat().st_mtime)
                 if mtime > max_mtime:
                     max_mtime = mtime
 
                 if interrupted():
-                    print("Interrupted, exiting", file=sys.stderr)
+                    log("Interrupted, exiting")
                     break
 
         index.set_mtime(max_mtime)
