@@ -299,7 +299,6 @@ class SymbolIndex:
             if readonly:
                 self._db = xapian.Database(str(path))
             else:
-                path.parent.mkdir(exist_ok=True)
                 self._db = xapian.WritableDatabase(str(path))
         except xapian.DatabaseOpeningError as e:
             if not path.is_dir():
