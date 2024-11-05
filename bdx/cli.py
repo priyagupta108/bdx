@@ -110,13 +110,17 @@ def _common_options(index_must_exist=False):
 
             if index_path.exists():
                 try:
-                    index = SymbolIndex(index_path, readonly=True)
-                    indexed_dir = index.binary_dir()
-                    if indexed_dir is not None and indexed_dir != directory:
-                        msg = (
-                            f"Index is for different directory: {indexed_dir}"
-                        )
-                        raise click.BadParameter(msg)
+                    with SymbolIndex(index_path, readonly=True) as index:
+                        indexed_dir = index.binary_dir()
+                        if (
+                            indexed_dir is not None
+                            and indexed_dir != directory
+                        ):
+                            msg = (
+                                "Index is for different "
+                                f"directory: {indexed_dir}"
+                            )
+                            raise click.BadParameter(msg)
                 except SymbolIndex.Error as e:
                     msg = f"Invalid index: {index_path}"
                     raise click.BadParameter(msg) from e
