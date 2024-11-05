@@ -95,7 +95,7 @@ $ bdx search -n 5 -f '{size:0>10}|{section:<30}|{name}' tree
 
         bdx search 'name:foo*' path:bar.o
 
-4. Search for symbols `bar` or `bar` that are not mangled (`_Z*` prefix):
+4. Search for symbols `foo` or `bar` that are not mangled (`_Z*` prefix):
 
         bdx search '(foo OR bar)' AND NOT name:_Z*
 
