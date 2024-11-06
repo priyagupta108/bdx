@@ -249,13 +249,17 @@ class Schema(Mapping):
             field = self[fieldname]
             field.index(document, fieldval)
 
-    def serialize_document(self, fields: dict[str, Any]) -> bytes:
+    def serialize_document(
+        self, fields: dict[str, Any], data: Any = None
+    ) -> bytes:
         """Make a xapian document from ``fields`` and serialize it to bytes."""
         document = xapian.Document()
         self.index_document(document, **fields)
+        if data is not None:
+            document.set_data(pickle.dumps(data))
         serialized_document = document.serialise()
 
-        return pickle.dumps((serialized_document, fields))
+        return serialized_document
 
 
 class SymbolIndex:
@@ -443,7 +447,7 @@ class SymbolIndex:
     @staticmethod
     def serialize_symbol(symbol: Symbol) -> bytes:
         """Serialize a symbol for adding it later."""
-        return SymbolIndex.SCHEMA.serialize_document(asdict(symbol))
+        return SymbolIndex.SCHEMA.serialize_document(asdict(symbol), symbol)
 
     def add_serialized_document(self, serialized_document: bytes):
         """Add a document to the SymbolIndex.
@@ -451,11 +455,7 @@ class SymbolIndex:
         To serialize a document, use the ``serialize_symbol`` function.
         """
         db = self._live_writable_db()
-
-        serialized_document, fields = pickle.loads(serialized_document)
-
         document = xapian.Document.unserialise(serialized_document)
-        document.set_data(pickle.dumps(fields))
         db.add_document(document)
 
     def delete_file(self, file: Path):
@@ -499,8 +499,7 @@ class SymbolIndex:
             for match in enquire.get_mset(first, limit):
                 document = match.document
                 pickled_data = document.get_data()
-                data = pickle.loads(pickled_data)
-                yield Symbol(**data)
+                yield pickle.loads(pickled_data)
         except xapian.DatabaseModifiedError as e:
             raise SymbolIndex.ModifiedError from e
 
