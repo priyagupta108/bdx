@@ -661,6 +661,8 @@ def _index_single_file(file: Path) -> int:
         index.add_symbol(Symbol(file, "", "", 0, file.stat().st_mtime_ns))
         num += 1
 
+    trace("{}: Adding {} symbol(s) to index", file, num)
+
     return num
 
 
@@ -734,18 +736,15 @@ def index_binary_directory(
             initargs=[index_path, stop_event, barrier],
         ) as pool,
     ):
-        perfile_iterator = zip(
-            changed_files,
-            pool.imap(_index_single_file, changed_files),
+        perfile_iterator = pool.imap_unordered(
+            _index_single_file, changed_files
         )
 
         iterator = tqdm(
             perfile_iterator, unit="file", total=len(changed_files)
         )
 
-        for path, num in iterator:
-            trace("{}: Adding {} symbol(s) to index", path, num)
-
+        for num in iterator:
             stats.num_files_indexed += 1
             stats.num_symbols_indexed += num
 
