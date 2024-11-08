@@ -5,12 +5,13 @@ import os
 import pickle
 import re
 import signal
+import threading
 from collections.abc import Mapping
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterator, List, Optional
+from typing import Any, Callable, ClassVar, Dict, Iterator, List, Optional
 
 import xapian
 from tqdm import tqdm
@@ -249,18 +250,6 @@ class Schema(Mapping):
             field = self[fieldname]
             field.index(document, fieldval)
 
-    def serialize_document(
-        self, fields: dict[str, Any], data: Any = None
-    ) -> bytes:
-        """Make a xapian document from ``fields`` and serialize it to bytes."""
-        document = xapian.Document()
-        self.index_document(document, **fields)
-        if data is not None:
-            document.set_data(pickle.dumps(data))
-        serialized_document = document.serialise()
-
-        return serialized_document
-
 
 class SymbolIndex:
     """Easy interface for a xapian interface, with schema support."""
@@ -298,20 +287,15 @@ class SymbolIndex:
     def __init__(
         self,
         path: Path,
-        readonly: bool = False,
+        readonly: bool,
+        is_shard: bool,
     ):
         """Construct a SymbolIndex at given ``path``.
 
-        Args:
-            path: Path to the database directory.
-                  It will be created if it doesn't exist, except
-                  if ``readonly``.
-            readonly: If False, create a writable database,
-                  otherwise the database will be read-only.
+        Do not use this constructor directly - instead, use one of the
+        factory functions.
 
         """
-        debug("Opening index: {}", path)
-
         if not readonly:
             path.mkdir(exist_ok=True, parents=True)
 
@@ -343,14 +327,78 @@ class SymbolIndex:
                 )
             schema = saved_schema
 
+        self._shards: list[xapian.Database | xapian.WritableDatabase] = []
+        self._is_shard = is_shard
+        if not is_shard:
+            for shard in self.shards():
+                trace("Opening shard: {}", shard)
+                if readonly:
+                    db = xapian.Database(str(shard))
+                else:
+                    db = xapian.WritableDatabase(str(shard))
+                self._shards.append(db)
+                self._db.add_database(db)
+
         self._schema = schema or Schema()
 
         if not readonly:
             self.set_metadata("__schema__", pickle.dumps(schema))
 
-        debug("Index has saved binary directory: {}", self.binary_dir())
-        debug("Index mtime: {}", self.mtime())
-        trace("Index schema: {}", self._schema)
+    @staticmethod
+    def open(directory: Path | str, readonly: bool = False) -> "SymbolIndex":
+        """Open a SymbolIndex.
+
+        Args:
+            directory: Path to the database directory.
+                It will be created if it doesn't exist, except
+                if ``readonly``.
+            readonly: If False, create a writable database,
+                otherwise the database will be read-only.
+
+        """
+        index = SymbolIndex(
+            Path(directory) / "db", readonly=readonly, is_shard=False
+        )
+
+        debug("Opened index: {}", index.path)
+        debug("Index has saved binary directory: {}", index.binary_dir())
+        debug("Index mtime: {}", index.mtime())
+        trace("Index schema: {}", index.schema)
+
+        return index
+
+    @staticmethod
+    def open_shard(directory: Path | str) -> "SymbolIndex":
+        """Open a writable shard for index in given directory."""
+        for path in SymbolIndex.generate_shard_paths(Path(directory) / "db"):
+            try:
+                return SymbolIndex(path, readonly=False, is_shard=True)
+            except Exception:
+                pass
+
+        msg = f"Could not open shard for {directory}"
+        raise SymbolIndex.Error(msg)
+
+    @staticmethod
+    def generate_shard_paths(directory: Path | str) -> Iterator[Path]:
+        """Infinitely yield paths to possible shards of this database.
+
+        The shards reside in the same directory, but with different suffix.
+
+        """
+        directory = Path(directory).absolute()
+        i = 0
+        while True:
+            yield directory.parent / f"{directory.name}.{i:0>3}"
+            i += 1
+
+    def shards(self) -> Iterator[Path]:
+        """Yield the shards of this database."""
+        for x in self.generate_shard_paths(self.path):
+            if x.exists():
+                yield x
+            else:
+                break
 
     @staticmethod
     def default_path(directory: Path | str) -> Path:
@@ -374,7 +422,10 @@ class SymbolIndex:
 
     def close(self):
         """Close this SymbolIndex."""
-        debug("Closing index: {}", self.path)
+        if self._is_shard:
+            trace("Closing shard: {}", self.path)
+        else:
+            debug("Closing index: {}", self.path)
         self._live_db().close()
         self._db = None
 
@@ -444,18 +495,12 @@ class SymbolIndex:
             self._live_writable_db().cancel_transaction()
             raise
 
-    @staticmethod
-    def serialize_symbol(symbol: Symbol) -> bytes:
-        """Serialize a symbol for adding it later."""
-        return SymbolIndex.SCHEMA.serialize_document(asdict(symbol), symbol)
-
-    def add_serialized_document(self, serialized_document: bytes):
-        """Add a document to the SymbolIndex.
-
-        To serialize a document, use the ``serialize_symbol`` function.
-        """
+    def add_symbol(self, symbol: Symbol):
+        """Add a document to the SymbolIndex."""
         db = self._live_writable_db()
-        document = xapian.Document.unserialise(serialized_document)
+        document = xapian.Document()
+        self.schema.index_document(document, **asdict(symbol))
+        document.set_data(pickle.dumps(symbol))
         db.add_document(document)
 
     def delete_file(self, file: Path):
@@ -566,13 +611,29 @@ def sigint_catcher() -> Iterator[Callable[[], bool]]:
         signal.signal(signal.SIGINT, original_handler)
 
 
-def _read_and_serialize_symtable(file: Path) -> list[bytes]:
-    ret = []
+@dataclass
+class _WorkerContext:
+    index: SymbolIndex
+
+    instance: ClassVar["_WorkerContext"]
+
+    def run(self):
+        with self.index.transaction():
+            yield
+
+        self.index.close()
+
+
+def _index_single_file(file) -> int:
+    index = _WorkerContext.instance.index
+
     try:
         symtab = read_symtable(file)
     except Exception as e:
         log("{}: {}: {}", file.name, e.__class__.__name__, str(e))
-        return []
+        return 0
+
+    num = 0
 
     for symbol in symtab:
         detail_log(
@@ -585,15 +646,39 @@ def _read_and_serialize_symtable(file: Path) -> list[bytes]:
         if symbol.size == 0:
             # TODO: Add an option to also index 0-size symbols
             continue
-        ret.append(SymbolIndex.serialize_symbol(symbol))
 
-    if not ret:
+        index.add_symbol(symbol)
+
+        num += 1
+
+    if num == 0:
         trace("{}: No symbols found", file)
         # Add a single document if there are no symbols.  Otherwise,
         # we would always treat it as unindexed.
-        ret.append(SymbolIndex.serialize_symbol(Symbol(file, "", "", 0)))
+        index.add_symbol(Symbol(file, "", "", 0))
+        num += 1
 
-    return ret
+    return num
+
+
+def _init_pool_worker(index_path, stop_event, barrier):
+    index = SymbolIndex.open_shard(index_path)
+    context = _WorkerContext(index)
+    runner = context.run()
+
+    next(runner)
+
+    def watchdog_thread():
+        stop_event.wait()
+        try:
+            next(runner)
+        except StopIteration:
+            pass
+        barrier.wait()
+
+    threading.Thread(target=watchdog_thread).start()
+
+    _WorkerContext.instance = context
 
 
 def index_binary_directory(
@@ -606,7 +691,7 @@ def index_binary_directory(
 
     bindir_path = Path(directory)
 
-    with SymbolIndex(index_path, readonly=False) as index:
+    with SymbolIndex.open(index_path, readonly=False) as index:
         if index.binary_dir() is None:
             index.set_binary_dir(bindir_path)
 
@@ -629,47 +714,52 @@ def index_binary_directory(
         stats.num_files_deleted = len(deleted_files)
 
         for file in changed_files:
+            index.delete_file(file)
             debug("File modified: {}", file)
         for file in deleted_files:
+            index.delete_file(file)
             debug("File deleted: {}", file)
 
-        with (
-            sigint_catcher() as interrupted,
-            mp.Pool() as pool,
-            index.transaction(),
-        ):
-            perfile_iterator = zip(
-                changed_files,
-                pool.imap(_read_and_serialize_symtable, changed_files),
-            )
+    num_processes = os.cpu_count() or 1
+    stop_event = mp.Event()
+    barrier = mp.Barrier(num_processes + 1)
 
-            iterator = tqdm(
-                perfile_iterator, unit="file", total=len(changed_files)
-            )
+    with (
+        sigint_catcher() as interrupted,
+        mp.Pool(
+            initializer=_init_pool_worker,
+            initargs=[index_path, stop_event, barrier],
+        ) as pool,
+    ):
+        perfile_iterator = zip(
+            changed_files,
+            pool.imap(_index_single_file, changed_files),
+        )
 
-            for file in deleted_files:
-                index.delete_file(file)
+        iterator = tqdm(
+            perfile_iterator, unit="file", total=len(changed_files)
+        )
 
-            max_mtime = mtime
+        max_mtime = mtime
 
-            for path, serialized_docs in iterator:
-                num = len(serialized_docs)
-                trace("{}: Adding {} symbol(s) to index", path, num)
+        for path, num in iterator:
+            trace("{}: Adding {} symbol(s) to index", path, num)
 
-                for doc in serialized_docs:
-                    index.add_serialized_document(doc)
+            stats.num_files_indexed += 1
+            stats.num_symbols_indexed += num
 
-                stats.num_files_indexed += 1
-                stats.num_symbols_indexed += num
+            mtime = datetime.fromtimestamp(path.stat().st_mtime)
+            if mtime > max_mtime:
+                max_mtime = mtime
 
-                mtime = datetime.fromtimestamp(path.stat().st_mtime)
-                if mtime > max_mtime:
-                    max_mtime = mtime
+            if interrupted():
+                log("Interrupted, exiting")
+                break
 
-                if interrupted():
-                    log("Interrupted, exiting")
-                    break
+        stop_event.set()
+        barrier.wait()
 
+    with SymbolIndex.open(index_path, readonly=False) as index:
         index.set_mtime(max_mtime)
 
     return stats
@@ -685,6 +775,6 @@ def search_index(
     if not query:
         query = "*:*"
 
-    with SymbolIndex(index_path, readonly=True) as index:
+    with SymbolIndex.open(index_path, readonly=True) as index:
         for symbol in index.search(query, limit=limit):
             consumer(symbol)

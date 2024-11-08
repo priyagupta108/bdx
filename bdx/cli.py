@@ -22,7 +22,7 @@ def guess_directory_from_index_path(
     """Return the path to the binary directory for given index path."""
     if index_path is not None and Path(index_path).exists():
         try:
-            with SymbolIndex(index_path, readonly=True) as index:
+            with SymbolIndex.open(index_path, readonly=True) as index:
                 binary_dir = index.binary_dir()
                 if binary_dir is not None:
                     return binary_dir
@@ -110,7 +110,7 @@ def _common_options(index_must_exist=False):
 
             if index_path.exists():
                 try:
-                    with SymbolIndex(index_path, readonly=True) as index:
+                    with SymbolIndex.open(index_path, readonly=True) as index:
                         indexed_dir = index.binary_dir()
                         if (
                             indexed_dir is not None
@@ -247,7 +247,7 @@ def search(_directory, index_path, query, num, format):
 @_common_options(index_must_exist=True)
 def files(_directory, index_path):
     """List all indexed files in a binary directory."""
-    with SymbolIndex(index_path, readonly=True) as index:
+    with SymbolIndex.open(index_path, readonly=True) as index:
         for path in index.all_files():
             print(path)
 
