@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -21,12 +22,15 @@ class Symbol:
     name: str
     section: str
     size: int
+    mtime: int
 
 
 def read_symtable(file: str | Path) -> list[Symbol]:
     """Get a symtable from the given file."""
     with open(file, "rb") as f, ELFFile(f) as elf:
         symtab = elf.get_section_by_name(".symtab")
+
+        mtime = os.stat(file).st_mtime_ns
 
         symbols = []
         for symbol in symtab.iter_symbols():  # pyright: ignore
@@ -43,6 +47,7 @@ def read_symtable(file: str | Path) -> list[Symbol]:
                     name=symbol.name,
                     section=section,
                     size=size,
+                    mtime=mtime,
                 )
             )
 

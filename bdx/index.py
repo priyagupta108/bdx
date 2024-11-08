@@ -260,6 +260,7 @@ class SymbolIndex:
             SymbolNameField("name", "XN"),
             TextField("section", "XSN"),
             IntegerField("size", "XSZ", slot=0),
+            IntegerField("mtime", "XM", slot=1),
         ]
     )
 
@@ -456,15 +457,15 @@ class SymbolIndex:
         self._live_writable_db().set_metadata(key, metadata)
 
     def mtime(self) -> datetime:
-        """Return the modification time of this index, set by ``set_mtime``."""
-        if "mtime" in set(self.get_metadata_keys()):
-            return pickle.loads(self.get_metadata("mtime"))
-        else:
+        """Return the max modification time of this index."""
+        db = self._live_db()
+        field_data = self.schema["mtime"]
+        val = db.get_value_upper_bound(field_data.slot)  # pyright: ignore
+        if not val:
             return datetime.fromtimestamp(0)
 
-    def set_mtime(self, mtime: datetime):
-        """Set the modification time of this index."""
-        self.set_metadata("mtime", pickle.dumps(mtime))
+        val_int = xapian.sortable_unserialise(val)
+        return datetime.fromtimestamp(val_int / 1e9)
 
     def binary_dir(self) -> Optional[Path]:
         """Get binary directory of this index, set by ``set_binary_dir``."""
@@ -624,8 +625,9 @@ class _WorkerContext:
         self.index.close()
 
 
-def _index_single_file(file) -> int:
-    index = _WorkerContext.instance.index
+def _index_single_file(file: Path) -> int:
+    context = _WorkerContext.instance
+    index = context.index
 
     try:
         symtab = read_symtable(file)
@@ -637,11 +639,12 @@ def _index_single_file(file) -> int:
 
     for symbol in symtab:
         detail_log(
-            "Got symbol '{}' in {}, section '{}', size {}",
+            "Got symbol '{}' in {}, section '{}', size {}, mtime {}",
             symbol.name,
             symbol.path,
             symbol.section,
             symbol.size,
+            symbol.mtime,
         )
         if symbol.size == 0:
             # TODO: Add an option to also index 0-size symbols
@@ -655,7 +658,7 @@ def _index_single_file(file) -> int:
         trace("{}: No symbols found", file)
         # Add a single document if there are no symbols.  Otherwise,
         # we would always treat it as unindexed.
-        index.add_symbol(Symbol(file, "", "", 0))
+        index.add_symbol(Symbol(file, "", "", 0, file.stat().st_mtime_ns))
         num += 1
 
     return num
@@ -740,17 +743,11 @@ def index_binary_directory(
             perfile_iterator, unit="file", total=len(changed_files)
         )
 
-        max_mtime = mtime
-
         for path, num in iterator:
             trace("{}: Adding {} symbol(s) to index", path, num)
 
             stats.num_files_indexed += 1
             stats.num_symbols_indexed += num
-
-            mtime = datetime.fromtimestamp(path.stat().st_mtime)
-            if mtime > max_mtime:
-                max_mtime = mtime
 
             if interrupted():
                 log("Interrupted, exiting")
@@ -758,9 +755,6 @@ def index_binary_directory(
 
         stop_event.set()
         barrier.wait()
-
-    with SymbolIndex.open(index_path, readonly=False) as index:
-        index.set_mtime(max_mtime)
 
     return stats
 
