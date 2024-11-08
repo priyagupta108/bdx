@@ -481,7 +481,6 @@ class SymbolIndex:
     def transaction(self):
         """Return a context manager for transactions in this SymbolIndex."""
         try:
-            trace("Begin transaction")
             self._live_writable_db().begin_transaction()
         except xapian.InvalidOperationError as e:
             msg = "Already inside a transaction"
@@ -489,10 +488,9 @@ class SymbolIndex:
 
         try:
             yield None
-            trace("Commit transaction")
             self._live_writable_db().commit_transaction()
-        except Exception:
-            trace("Cancel transaction")
+        except Exception as e:
+            debug("Cancel transaction due to error: {}", e)
             self._live_writable_db().cancel_transaction()
             raise
 
