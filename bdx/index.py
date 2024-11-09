@@ -252,7 +252,7 @@ class Schema(Mapping):
 
 
 class SymbolIndex:
-    """Easy interface for a xapian interface, with schema support."""
+    """Easy interface for a xapian database, with schema support."""
 
     SCHEMA = Schema(
         [
