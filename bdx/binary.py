@@ -30,7 +30,7 @@ def read_symtable(file: str | Path) -> list[Symbol]:
     with open(file, "rb") as f, ELFFile(f) as elf:
         symtab = elf.get_section_by_name(".symtab")
 
-        mtime = os.stat(file).st_mtime_ns
+        mtime = os.stat(f.fileno()).st_mtime_ns
 
         symbols = []
         for symbol in symtab.iter_symbols():  # pyright: ignore
