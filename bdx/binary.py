@@ -21,6 +21,7 @@ class Symbol:
     path: Path
     name: str
     section: str
+    address: int
     size: int
     mtime: int
 
@@ -34,10 +35,10 @@ def read_symtable(file: str | Path) -> list[Symbol]:
 
         symbols = []
         for symbol in symtab.iter_symbols():  # pyright: ignore
-            size = symbol.entry["st_size"]
+            size = symbol["st_size"]
 
             try:
-                section = elf.get_section(symbol.entry["st_shndx"]).name
+                section = elf.get_section(symbol["st_shndx"]).name
             except Exception:
                 section = ""
 
@@ -46,6 +47,7 @@ def read_symtable(file: str | Path) -> list[Symbol]:
                     path=Path(file),
                     name=symbol.name,
                     section=section,
+                    address=symbol["st_value"],
                     size=size,
                     mtime=mtime,
                 )

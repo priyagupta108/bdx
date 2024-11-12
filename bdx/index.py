@@ -259,8 +259,9 @@ class SymbolIndex:
             PathField("path", "XP"),
             SymbolNameField("name", "XN"),
             TextField("section", "XSN"),
-            IntegerField("size", "XSZ", slot=0),
-            IntegerField("mtime", "XM", slot=1),
+            IntegerField("address", "XA", slot=0),
+            IntegerField("size", "XSZ", slot=1),
+            IntegerField("mtime", "XM", slot=2),
         ]
     )
 
@@ -656,7 +657,16 @@ def _index_single_file(file: Path) -> int:
         trace("{}: No symbols found", file)
         # Add a single document if there are no symbols.  Otherwise,
         # we would always treat it as unindexed.
-        index.add_symbol(Symbol(file, "", "", 0, file.stat().st_mtime_ns))
+        index.add_symbol(
+            Symbol(
+                path=file,
+                name="",
+                section="",
+                address=0,
+                size=0,
+                mtime=file.stat().st_mtime_ns,
+            )
+        )
         num += 1
 
     trace("{}: Adding {} symbol(s) to index", file, num)
