@@ -3,18 +3,23 @@ from __future__ import annotations
 import json
 import os
 import re
-from dataclasses import dataclass, field
+from collections import defaultdict
+from dataclasses import dataclass, field, replace
 from datetime import datetime
-from functools import cached_property
+from functools import cached_property, total_ordering
 from pathlib import Path
 from typing import Iterator, Optional
 
 from elftools.elf.elffile import ELFFile
+from elftools.elf.relocation import Relocation, RelocationSection
+from elftools.elf.sections import SymbolTableSection
+from sortedcontainers import SortedList
 
 from bdx import info, trace
 
 
-@dataclass(frozen=True)
+@total_ordering
+@dataclass(frozen=True, order=False)
 class Symbol:
     """Represents a symbol in a binary file."""
 
@@ -23,35 +28,105 @@ class Symbol:
     section: str
     address: int
     size: int
+    relocations: list[str]
     mtime: int
+
+    def __lt__(self, other):
+        return self.address < other.address
+
+
+def _read_symtab(file: Path, elf: ELFFile) -> list[Symbol]:
+    symtab = elf.get_section_by_name(".symtab")
+    if not isinstance(symtab, SymbolTableSection):
+        msg = ".symtab is not a SymbolTableSection"
+        raise RuntimeError(msg)
+
+    mtime = os.stat(elf.stream.fileno()).st_mtime_ns
+
+    symbols = []
+    for symbol in symtab.iter_symbols():
+        size = symbol["st_size"]
+
+        try:
+            section = elf.get_section(symbol["st_shndx"]).name
+        except Exception:
+            section = ""
+        symbols.append(
+            Symbol(
+                path=Path(file),
+                name=symbol.name,
+                section=section,
+                address=symbol["st_value"],
+                size=size,
+                relocations=list(),
+                mtime=mtime,
+            )
+        )
+
+    return symbols
+
+
+def _find_relocation_target(
+    reloc: Relocation, symlist: SortedList[Symbol]
+) -> Optional[Symbol]:
+    if not symlist:
+        return None
+
+    address = reloc["r_offset"]
+    index = symlist.bisect_left(replace(symlist[0], address=address))
+
+    possibilities = symlist[max(index - 1, 0) : index + 1]
+    for symbol in possibilities:
+        start = symbol.address
+        end = start + symbol.size
+        if start <= address < end:
+            return symbol
+
+    return None
+
+
+def _read_relocations(elf: ELFFile, symbols: list[Symbol]):
+    symbols_by_section: dict[str, SortedList[Symbol]] = defaultdict(SortedList)
+    for sym in symbols:
+        symbols_by_section[sym.section].add(sym)
+
+    for reloc_section in elf.iter_sections():
+        if not isinstance(reloc_section, RelocationSection):
+            continue
+
+        section = elf.get_section(reloc_section["sh_info"])
+        symtable = elf.get_section(reloc_section["sh_link"])
+        symlist = symbols_by_section[section.name]
+
+        if not isinstance(symtable, SymbolTableSection):
+            msg = (
+                f"Section {symtable.name} linked to relocation section "
+                f"{reloc_section.name} is not a valid SymbolTableSection"
+            )
+            raise RuntimeError(msg)
+
+        for reloc in reloc_section.iter_relocations():
+            symbol = _find_relocation_target(reloc, symlist)
+            if symbol is None:
+                continue
+
+            relocated_symbol_name = symtable.get_symbol(
+                reloc["r_info_sym"]
+            ).name
+            symbol.relocations.append(relocated_symbol_name)
+
+    for symbol in symbols:
+        refs = list(set(symbol.relocations))
+        refs.sort()
+        symbol.relocations.clear()
+        symbol.relocations.extend(refs)
 
 
 def read_symtable(file: str | Path) -> list[Symbol]:
     """Get a symtable from the given file."""
     with open(file, "rb") as f, ELFFile(f) as elf:
-        symtab = elf.get_section_by_name(".symtab")
-
-        mtime = os.stat(f.fileno()).st_mtime_ns
-
-        symbols = []
-        for symbol in symtab.iter_symbols():  # pyright: ignore
-            size = symbol["st_size"]
-
-            try:
-                section = elf.get_section(symbol["st_shndx"]).name
-            except Exception:
-                section = ""
-
-            symbols.append(
-                Symbol(
-                    path=Path(file),
-                    name=symbol.name,
-                    section=section,
-                    address=symbol["st_value"],
-                    size=size,
-                    mtime=mtime,
-                )
-            )
+        symbols = _read_symtab(Path(file), elf)
+        _read_relocations(elf, symbols)
 
         return symbols
 

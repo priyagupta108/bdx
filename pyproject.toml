@@ -20,6 +20,7 @@ dependencies = [
     "click",
     "pyelftools",
     "tqdm",
+    "sortedcontainers",
 ]
 
 [project.optional-dependencies]
@@ -30,6 +31,7 @@ dev = [
     "isort",
     "pytest",
     "pyright",
+    "sortedcontainers-stubs",
 ]
 
 [project.urls]

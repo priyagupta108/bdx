@@ -99,15 +99,23 @@ $ bdx search -n 5 -f '{size:0>10}|{section:<30}|{name}' tree
 
         bdx search '(foo OR bar)' AND NOT name:_Z*
 
-5. Search for symbols with size in some range:
+5. Search for symbols that reference/call `memset`:
+
+        bdx search relocations:memset
+
+6. Search for symbols that call `malloc`, but not `free`:
+
+        bdx search relocations:malloc NOT relocations:free
+
+7. Search for symbols with size in some range:
 
         bdx search foo size:100..200
 
-6. Search for literal strings:
+8. Search for literal strings:
 
         bdx search 'path:"/path/to/some/file.o"'
 
-7. Search for big symbols in some section:
+9. Search for big symbols in some section:
 
         bdx search section:.rodata AND size:1000..
 

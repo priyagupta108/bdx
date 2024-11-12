@@ -162,6 +162,18 @@ class PathField(DatabaseField):
         super().index(document, path.name)
 
 
+class RelocationsField(DatabaseField):
+    """Represents a field for the list of relocations in a given symbol."""
+
+    def index(self, document: xapian.Document, value: Any):
+        """Index ``value`` in the ``document``."""
+        if isinstance(value, list):
+            for v in value:
+                self.index(document, v)
+        else:
+            return super().index(document, value)
+
+
 class SymbolNameField(TextField):
     """DatabaseField that indexes symbol names specially."""
 
@@ -251,6 +263,7 @@ class SymbolIndex:
             DatabaseField("section", "XSN"),
             IntegerField("address", "XA", slot=0),
             IntegerField("size", "XSZ", slot=1),
+            RelocationsField("relocations", "XR"),
             IntegerField("mtime", "XM", slot=2),
         ]
     )
@@ -654,6 +667,7 @@ def _index_single_file(file: Path) -> int:
                 section="",
                 address=0,
                 size=0,
+                relocations=list(),
                 mtime=file.stat().st_mtime_ns,
             )
         )
