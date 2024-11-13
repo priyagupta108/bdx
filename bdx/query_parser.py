@@ -34,7 +34,7 @@ class Token(Enum):
             (Token.Rparen, re.compile(r"[)]")),
             (Token.String, re.compile(r'"([^"]+)"')),
             (Token.Field, re.compile(r"([a-zA-Z_]+):")),
-            (Token.Wildcard, re.compile(r"([a-zA-Z_][a-zA-Z0-9_.]*)[*]")),
+            (Token.Wildcard, re.compile(r"([a-zA-Z0-9_.]+)[*]")),
             (Token.Term, re.compile(r"([a-zA-Z0-9_.]+)")),
         ]
 
@@ -72,7 +72,7 @@ class QueryParser:
     # NOT = NOT|!
     # field = [a-zA-Z_]+ ":"
     # string = '"' [^"]+ '"'
-    # wildcard = [a-zA-Z0-9_.]*[*]
+    # wildcard = [a-zA-Z0-9_.]+[*]
     # term = [a-zA-Z0-9_.]*
 
     def __init__(
