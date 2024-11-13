@@ -156,7 +156,7 @@ def test_field_with_value(query_parser):
     )
     assert query_to_tuple(query_parser.parse_query("name: FOO")) == (
         LEAF_TERM,
-        "XNAMEfoo",
+        "XNAMEFOO",
     )
 
 
@@ -263,13 +263,9 @@ def test_path_field(query_parser):
         ]
     )
 
-    assert query_to_tuple(query_parser.parse_query("name:BAR")) == (
+    assert query_to_tuple(query_parser.parse_query('path:"/FOO"')) == (
         LEAF_TERM,
-        "XNAMEbar",
-    )
-    assert query_to_tuple(query_parser.parse_query("path:FOO")) == (
-        LEAF_TERM,
-        "XPATHFOO",
+        "XPATH/FOO",
     )
 
     query_parser.default_fields = ["name", "path"]
@@ -277,7 +273,7 @@ def test_path_field(query_parser):
         OR,
         (
             LEAF_TERM,
-            "XNAMEfoo",
+            "XNAMEFOO",
         ),
         (
             LEAF_TERM,

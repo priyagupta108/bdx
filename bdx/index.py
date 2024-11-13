@@ -40,15 +40,11 @@ class DatabaseField:
         document.add_term(term)
 
     def preprocess_value(self, value: Any) -> bytes:
-        """Preprocess the value before indexing it.
-
-        This will e.g. make the value lowercase.
-        """
+        """Preprocess the value before indexing it."""
         if not isinstance(value, (str, bytes)):
             value = str(value)
         if isinstance(value, str):
             value = value.encode()
-        value = value.lower()
         return value
 
     def make_query(self, value: str, wildcard: bool = False) -> xapian.Query:
@@ -74,6 +70,10 @@ class DatabaseField:
 
 class TextField(DatabaseField):
     """A database field that indexes text."""
+
+    def preprocess_value(self, value: Any) -> bytes:
+        """Preprocess the value before indexing it."""
+        return super().preprocess_value(value).lower()
 
     def index(self, document: xapian.Document, value: Any):
         """Index ``value`` in the ``document``."""
@@ -152,16 +152,6 @@ class IntegerField(DatabaseField):
 
 class PathField(DatabaseField):
     """Represents a path field in the database."""
-
-    def preprocess_value(self, value: Any) -> bytes:
-        """Preprocess the value before indexing it."""
-        if not isinstance(value, (str, bytes)):
-            value = str(value)
-        if isinstance(value, str):
-            value = value.encode()
-
-        # PathField does not make value lowercase.
-        return value
 
     def index(self, document: xapian.Document, value: Any):
         """Index ``value`` in the ``document``."""
@@ -258,7 +248,7 @@ class SymbolIndex:
         [
             PathField("path", "XP"),
             SymbolNameField("name", "XN"),
-            TextField("section", "XSN"),
+            DatabaseField("section", "XSN"),
             IntegerField("address", "XA", slot=0),
             IntegerField("size", "XSZ", slot=1),
             IntegerField("mtime", "XM", slot=2),
