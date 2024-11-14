@@ -64,6 +64,7 @@ ignore = [
     "D104",  # undocumented-public-package
     "D100",  # undocumented-public-module
     "D105",  # undocumented-magic-method
+    "I001",  # unsorted-imports
 ]
 
 unfixable = [

@@ -122,11 +122,16 @@ def _read_relocations(elf: ELFFile, symbols: list[Symbol]):
         symbol.relocations.extend(refs)
 
 
-def read_symtable(file: str | Path) -> list[Symbol]:
+def read_symtable(
+    file: str | Path,
+    with_relocations: bool = True,
+) -> list[Symbol]:
     """Get a symtable from the given file."""
     with open(file, "rb") as f, ELFFile(f) as elf:
         symbols = _read_symtab(Path(file), elf)
-        _read_relocations(elf, symbols)
+
+        if with_relocations:
+            _read_relocations(elf, symbols)
 
         return symbols
 

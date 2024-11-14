@@ -8,12 +8,18 @@ from sys import exit, stdout
 from typing import Optional
 
 import click
+from click.shell_completion import CompletionItem
+from click.types import BoolParamType, IntParamType
 
 import bdx
 from bdx import debug, error, info, log
 from bdx.binary import BinaryDirectory, Symbol, find_compilation_database
-from bdx.index import SymbolIndex, index_binary_directory, search_index
+# fmt: off
+from bdx.index import (IndexingOptions, SymbolIndex, index_binary_directory,
+                       search_index)
 from bdx.query_parser import QueryParser
+
+# fmt: on
 
 
 def guess_directory_from_index_path(
@@ -143,6 +149,59 @@ def _common_options(index_must_exist=False):
     return decorator
 
 
+class IndexingOptionParamType(click.ParamType):
+    """Click parameter type for indexing --opt."""
+
+    name = "option"
+
+    OPTIONS = [x for x in dir(IndexingOptions) if not x.startswith("_")]
+
+    CONVERTERS = {
+        bool: BoolParamType,
+        int: IntParamType,
+    }
+
+    def convert(self, value, param, ctx):
+        """Convert the given value to correct type, or error out."""
+        try:
+            k, v = value.split("=", maxsplit=1)
+        except ValueError:
+            self.fail(f"Argument '{value}' should be of the form 'key=value'")
+
+        if k not in self.OPTIONS:
+            self.fail(f"Unknown option '{k}'")
+
+        wanted_type = type(getattr(IndexingOptions, k))
+
+        return (k, self.CONVERTERS[wanted_type]().convert(v, param, ctx))
+
+    def shell_complete(
+        self, ctx: click.Context, param: click.Parameter, incomplete: str
+    ) -> list[CompletionItem]:
+        """Complete choices that start with the incomplete value."""
+        if "=" not in incomplete:
+            matched = (
+                c + "=" for c in self.OPTIONS if c.startswith(incomplete)
+            )
+        else:
+            k, v = incomplete.split("=", maxsplit=1)
+
+            if k not in self.OPTIONS:
+                return []
+
+            wanted_type = type(getattr(IndexingOptions, k))
+            items = self.CONVERTERS[wanted_type]().shell_complete(
+                ctx, param, v
+            )
+            matched = (f"{k}={i.value}" for i in items)
+
+        return [CompletionItem(c) for c in matched]
+
+    def get_metavar(self, param: click.Parameter) -> str:
+        """Get the metavar for this option."""
+        return "|".join([f"{o}=VALUE" for o in self.OPTIONS])
+
+
 @click.group()
 def cli():
     """Binary indexer."""
@@ -152,13 +211,23 @@ def cli():
 @cli.command()
 @_common_options(index_must_exist=False)
 @click.option("-c", "--use-compilation-database", is_flag=True)
-def index(directory, index_path, use_compilation_database):
+@click.option(
+    "-o",
+    "--opt",
+    multiple=True,
+    type=IndexingOptionParamType(),
+    help="Set indexing options (key=value).",
+)
+def index(directory, index_path, opt, use_compilation_database):
     """Index the specified directory."""
+    options = IndexingOptions(**dict(opt))
+
     try:
         stats = index_binary_directory(
             directory,
             index_path,
-            use_compilation_database,
+            options=options,
+            use_compilation_database=use_compilation_database,
         )
     except BinaryDirectory.CompilationDatabaseNotFoundError as e:
         error(str(e))

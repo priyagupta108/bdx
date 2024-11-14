@@ -22,6 +22,13 @@ from bdx.binary import BinaryDirectory, Symbol, read_symtable
 MAX_TERM_SIZE = 244
 
 
+@dataclass
+class IndexingOptions:
+    """User settings for indexing."""
+
+    index_relocations: bool = True
+
+
 @dataclass(frozen=True)
 class DatabaseField:
     """Contains information about a schema field."""
@@ -617,6 +624,7 @@ def sigint_catcher() -> Iterator[Callable[[], bool]]:
 @dataclass
 class _WorkerContext:
     index: SymbolIndex
+    options: IndexingOptions
 
     instance: ClassVar["_WorkerContext"]
 
@@ -630,9 +638,13 @@ class _WorkerContext:
 def _index_single_file(file: Path) -> int:
     context = _WorkerContext.instance
     index = context.index
+    options = context.options
 
     try:
-        symtab = read_symtable(file)
+        symtab = read_symtable(
+            file,
+            with_relocations=options.index_relocations,
+        )
     except Exception as e:
         log("{}: {}: {}", file.name, e.__class__.__name__, str(e))
         return 0
@@ -678,9 +690,14 @@ def _index_single_file(file: Path) -> int:
     return num
 
 
-def _init_pool_worker(index_path, stop_event, barrier):
+def _init_pool_worker(
+    index_path,
+    stop_event,
+    barrier,
+    options: IndexingOptions,
+):
     index = SymbolIndex.open_shard(index_path)
-    context = _WorkerContext(index)
+    context = _WorkerContext(index, options)
     runner = context.run()
 
     next(runner)
@@ -701,10 +718,12 @@ def _init_pool_worker(index_path, stop_event, barrier):
 def index_binary_directory(
     directory: str | Path,
     index_path: Path,
+    options: IndexingOptions,
     use_compilation_database: bool = False,
 ) -> IndexingStats:
     """Index the given directory."""
     stats = IndexingStats()
+    debug("Options: {}", options)
 
     bindir_path = Path(directory)
 
@@ -745,7 +764,7 @@ def index_binary_directory(
         sigint_catcher() as interrupted,
         mp.Pool(
             initializer=_init_pool_worker,
-            initargs=[index_path, stop_event, barrier],
+            initargs=[index_path, stop_event, barrier, options],
         ) as pool,
     ):
         perfile_iterator = pool.imap_unordered(

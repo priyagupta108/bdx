@@ -43,6 +43,16 @@ Or you can specify the directory to index:
 
 The indexer will only index files changed since last run.
 
+The `index` command also accepts `-o`, `--opt` option which can be used to set
+some indexing settings, e.g. to disable indexing relocations:
+
+    bdx index -d ./build --opt index_relocations=False
+
+Available options:
+
+- `index_relocations` - if True (the default), all relocations will be applied
+  and indexed.  Setting this to False can significantly speed up indexing.
+
 ### Searching ###
 
 `bdx search` command accepts a query string.  A simple query language is
