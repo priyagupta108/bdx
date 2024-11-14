@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import asdict
 from functools import wraps
 from pathlib import Path
@@ -9,7 +10,7 @@ from typing import Optional
 
 import click
 from click.shell_completion import CompletionItem
-from click.types import BoolParamType, IntParamType
+from click.types import BoolParamType, IntRange
 
 import bdx
 from bdx import debug, error, info, log
@@ -157,8 +158,9 @@ class IndexingOptionParamType(click.ParamType):
     OPTIONS = [x for x in dir(IndexingOptions) if not x.startswith("_")]
 
     CONVERTERS = {
-        bool: BoolParamType,
-        int: IntParamType,
+        "num_processes": IntRange(min=1, max=(os.cpu_count() or 1) * 2),
+        "index_relocations": BoolParamType(),
+        "min_symbol_size": IntRange(min=0),
     }
 
     def convert(self, value, param, ctx):
@@ -171,9 +173,10 @@ class IndexingOptionParamType(click.ParamType):
         if k not in self.OPTIONS:
             self.fail(f"Unknown option '{k}'")
 
-        wanted_type = type(getattr(IndexingOptions, k))
-
-        return (k, self.CONVERTERS[wanted_type]().convert(v, param, ctx))
+        try:
+            return (k, self.CONVERTERS[k].convert(v, param, ctx))
+        except click.BadParameter as e:
+            raise click.BadParameter(f"{k}: {e}") from e
 
     def shell_complete(
         self, ctx: click.Context, param: click.Parameter, incomplete: str
@@ -189,10 +192,7 @@ class IndexingOptionParamType(click.ParamType):
             if k not in self.OPTIONS:
                 return []
 
-            wanted_type = type(getattr(IndexingOptions, k))
-            items = self.CONVERTERS[wanted_type]().shell_complete(
-                ctx, param, v
-            )
+            items = self.CONVERTERS[k].shell_complete(ctx, param, v)
             matched = (f"{k}={i.value}" for i in items)
 
         return [CompletionItem(c) for c in matched]
