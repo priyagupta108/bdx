@@ -27,6 +27,7 @@ class IndexingOptions:
     """User settings for indexing."""
 
     index_relocations: bool = True
+    min_symbol_size: int = 1
 
 
 @dataclass(frozen=True)
@@ -644,6 +645,7 @@ def _index_single_file(file: Path) -> int:
         symtab = read_symtable(
             file,
             with_relocations=options.index_relocations,
+            min_symbol_size=options.min_symbol_size,
         )
     except Exception as e:
         log("{}: {}: {}", file.name, e.__class__.__name__, str(e))
@@ -660,9 +662,6 @@ def _index_single_file(file: Path) -> int:
             symbol.size,
             symbol.mtime,
         )
-        if symbol.size == 0:
-            # TODO: Add an option to also index 0-size symbols
-            continue
 
         index.add_symbol(symbol)
 

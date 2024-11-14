@@ -53,6 +53,9 @@ Available options:
 - `index_relocations` - if True (the default), all relocations will be applied
   and indexed.  Setting this to False can significantly speed up indexing.
 
+- `min_symbol_size` - (default 1) only index symbols with size equal to or
+  greater than this.
+
 ### Searching ###
 
 `bdx search` command accepts a query string.  A simple query language is

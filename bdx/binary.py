@@ -35,7 +35,11 @@ class Symbol:
         return self.address < other.address
 
 
-def _read_symtab(file: Path, elf: ELFFile) -> list[Symbol]:
+def _read_symtab(
+    file: Path,
+    elf: ELFFile,
+    min_symbol_size: int,
+) -> list[Symbol]:
     symtab = elf.get_section_by_name(".symtab")
     if not isinstance(symtab, SymbolTableSection):
         msg = ".symtab is not a SymbolTableSection"
@@ -46,6 +50,8 @@ def _read_symtab(file: Path, elf: ELFFile) -> list[Symbol]:
     symbols = []
     for symbol in symtab.iter_symbols():
         size = symbol["st_size"]
+        if size < min_symbol_size:
+            continue
 
         try:
             section = elf.get_section(symbol["st_shndx"]).name
@@ -125,10 +131,13 @@ def _read_relocations(elf: ELFFile, symbols: list[Symbol]):
 def read_symtable(
     file: str | Path,
     with_relocations: bool = True,
+    min_symbol_size=1,
 ) -> list[Symbol]:
     """Get a symtable from the given file."""
     with open(file, "rb") as f, ELFFile(f) as elf:
-        symbols = _read_symtab(Path(file), elf)
+        symbols = _read_symtab(
+            Path(file), elf, min_symbol_size=min_symbol_size
+        )
 
         if with_relocations:
             _read_relocations(elf, symbols)
