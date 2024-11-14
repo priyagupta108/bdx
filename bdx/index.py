@@ -26,6 +26,7 @@ MAX_TERM_SIZE = 244
 class IndexingOptions:
     """User settings for indexing."""
 
+    num_processes: int = os.cpu_count() or 1
     index_relocations: bool = True
     min_symbol_size: int = 1
 
@@ -755,13 +756,14 @@ def index_binary_directory(
             index.delete_file(file)
             debug("File deleted: {}", file)
 
-    num_processes = os.cpu_count() or 1
+    num_processes = options.num_processes
     stop_event = mp.Event()
     barrier = mp.Barrier(num_processes + 1)
 
     with (
         sigint_catcher() as interrupted,
         mp.Pool(
+            processes=num_processes,
             initializer=_init_pool_worker,
             initargs=[index_path, stop_event, barrier, options],
         ) as pool,

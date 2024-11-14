@@ -50,6 +50,9 @@ some indexing settings, e.g. to disable indexing relocations:
 
 Available options:
 
+- `num_processes` - number of parallel indexing processes (default=same as # of
+  CPUs).
+
 - `index_relocations` - if True (the default), all relocations will be applied
   and indexed.  Setting this to False can significantly speed up indexing.
 
