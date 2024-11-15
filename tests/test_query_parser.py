@@ -168,7 +168,6 @@ def test_field_with_string_value(query_parser):
 
 
 def test_wildcard(query_parser):
-    query_parser.wildcard_field = "name"
     assert (
         query_to_str(query_parser.parse_query("fo*"))
         == "Query(WILDCARD SYNONYM XNAMEfo)"
@@ -183,17 +182,7 @@ def test_wildcard(query_parser):
     )
 
 
-def test_wildcard_with_no_wildcard_field(query_parser):
-    query_parser.wildcard_field = None
-    assert query_to_str(query_parser.parse_query("fo*")) == "Query()"
-    assert (
-        query_to_str(query_parser.parse_query("name:fo*"))
-        == "Query(WILDCARD SYNONYM XNAMEfo)"
-    )
-
-
 def test_auto_wildcard(query_parser):
-    query_parser.wildcard_field = "name"
     query_parser.auto_wildcard = True
     assert (
         query_to_str(query_parser.parse_query("fo"))
@@ -386,12 +375,6 @@ def test_ignores_invalid_tokens(query_parser):
             LEAF_TERM,
             "XNAMEbar",
         ),
-    )
-    assert query_to_tuple(
-        query_parser.parse_query("~@#$%^&*foo+*&^%$#@~")
-    ) == (
-        LEAF_TERM,
-        "XNAMEfoo",
     )
 
 

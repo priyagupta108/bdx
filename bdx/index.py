@@ -579,7 +579,6 @@ class SymbolIndex:
         query_parser = QueryParser(
             SymbolIndex.SCHEMA,
             default_fields=["name"],
-            wildcard_field="name",
             auto_wildcard=True,
         )
         return query_parser.parse_query(query)

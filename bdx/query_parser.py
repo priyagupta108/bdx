@@ -34,7 +34,7 @@ class Token(Enum):
             (Token.Rparen, re.compile(r"[)]")),
             (Token.String, re.compile(r'"([^"]+)"')),
             (Token.Field, re.compile(r"([a-zA-Z_]+):")),
-            (Token.Wildcard, re.compile(r"([a-zA-Z0-9_.]+)[*]")),
+            (Token.Wildcard, re.compile(r"[*]")),
             (Token.Term, re.compile(r"([a-zA-Z0-9_.]+)")),
         ]
 
@@ -65,21 +65,22 @@ class QueryParser:
     # expr =
     #         NOT expr
     #         | "(" query ")"
-    #         | [ field ] value
+    #         | field value
+    #         | field wildcard
+    #         | value
     #
-    # value = term | string | wildcard
+    # value = (term | string) [wildcard]
     #
     # NOT = NOT|!
     # field = [a-zA-Z_]+ ":"
     # string = '"' [^"]+ '"'
-    # wildcard = [a-zA-Z0-9_.]+[*]
+    # wildcard = [*]
     # term = [a-zA-Z0-9_.]*
 
     def __init__(
         self,
         schema: Schema,
         default_fields: Optional[list[str]] = None,
-        wildcard_field: Optional[str] = None,
         auto_wildcard: bool = False,
     ):
         """Construct a QueryParser using given schema.
@@ -90,8 +91,6 @@ class QueryParser:
                 searched for by default when the query contains a term value,
                 but does not specify a prefix
                 (e.g. "val*" instead of "field:val*").
-            wildcard_field: Name of the field that will be used when the user
-                enters a wildcard without specifying a field.
             auto_wildcard: If true, then each search term is implicitly
                 converted into a wildcard.
                 E.g. search "term" will become "field:term*".
@@ -99,7 +98,6 @@ class QueryParser:
         """
         self.schema = schema
         self.default_fields = default_fields or list(schema)
-        self.wildcard_field = wildcard_field
         self.auto_wildcard = auto_wildcard
         self._query = ""
         self._token: Optional[Token] = None
@@ -241,8 +239,6 @@ class QueryParser:
             retval = self._parse_term()
         elif self._token == Token.String:
             retval = self._parse_string()
-        elif self._token == Token.Wildcard:
-            retval = self._parse_wildcard()
         elif self._token == Token.Field:
             field = self._value
             self._parse_field()
@@ -278,43 +274,26 @@ class QueryParser:
         return retval
 
     def _parse_term(self):
-        self._expect(Token.Term, "term")
-        value = self._value
+        value, wildcard = self._maybe_consume_wildcard(Token.Term, "term")
+
         subqueries = []
         for field in self.default_fields:
             subquery = self.schema[field].make_query(
-                value, wildcard=self.auto_wildcard
+                value, wildcard=wildcard or self.auto_wildcard
             )
             subqueries.append(subquery)
 
-        self._next_token()
         self._parsed = self._merge_queries(subqueries)
         return True
 
-    def _parse_wildcard(self):
-        self._expect(Token.Wildcard, "wildcard")
-        if not self.wildcard_field:
-            self._parsed = self._empty
-            self._next_token()
-            return True
-
-        value = self._value
-        field = self.schema[self.wildcard_field]
-        query = field.make_query(value, wildcard=True)
-
-        self._next_token()
-        self._parsed = query
-        return True
-
     def _parse_string(self):
-        self._expect(Token.String, "string")
-        value = self._value
+        value, wildcard = self._maybe_consume_wildcard(Token.String, "string")
+
         subqueries = []
         for field in self.default_fields:
-            subquery = self.schema[field].make_query(value)
+            subquery = self.schema[field].make_query(value, wildcard=wildcard)
             subqueries.append(subquery)
 
-        self._next_token()
         self._parsed = self._merge_queries(subqueries)
         return True
 
@@ -323,20 +302,40 @@ class QueryParser:
         self._next_token()
 
     def _parse_field_with_value(self, field):
-        self._expect(
-            [Token.Term, Token.String, Token.Wildcard],
-            f'value for field "{field}"',
-        )
+        if self._token == Token.Wildcard:
+            # We are looking at "field:*"
+            value, wildcard = "", True
+            self._next_token()
+        else:
+            value, wildcard = self._maybe_consume_wildcard(
+                [Token.Term, Token.String],
+                f'value for field "{field}"',
+            )
 
         schema_field = self.schema[field]
 
         self._parsed = schema_field.make_query(
-            self._value,
-            wildcard=self._token == Token.Wildcard,
+            value,
+            wildcard=wildcard,
         )
 
-        self._next_token()
         return True
+
+    def _maybe_consume_wildcard(self, expected_token, msg) -> tuple[str, bool]:
+        self._expect(
+            expected_token,
+            msg,
+        )
+        value = self._value
+        self._next_token()
+
+        if self._token == Token.Wildcard:
+            have_it = True
+            self._next_token()
+        else:
+            have_it = False
+
+        return value, have_it
 
     def _merge_queries(self, subqueries):
         if len(subqueries) == 1:
