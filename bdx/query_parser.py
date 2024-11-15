@@ -243,7 +243,10 @@ class QueryParser:
             field = self._value
             self._parse_field()
 
-            is_known_field = field in self.schema
+            if field not in self.schema:
+                msg = f"Unknown field {field}"
+                raise QueryParser.Error(msg)
+
             value_present = self._token in [
                 Token.Term,
                 Token.String,
@@ -251,18 +254,12 @@ class QueryParser:
             ]
             ignore_missing_values = self.ignore_missing_field_values
 
-            if (
-                not is_known_field
-                and not value_present
-                and not ignore_missing_values
-            ):
+            if not value_present and not ignore_missing_values:
                 msg = (
                     f"Missing value for field {field} at position {self._pos}"
                 )
                 raise QueryParser.Error(msg)
-            if not is_known_field or (
-                not value_present and ignore_missing_values
-            ):
+            if not value_present and ignore_missing_values:
                 if value_present:
                     self._next_token()
                 self._parsed = self._empty

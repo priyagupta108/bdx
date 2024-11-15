@@ -234,7 +234,6 @@ def test_intrange(query_parser):
         query_to_str(query_parser.parse_query("value:99182"))
         == "Query(VALUE_RANGE 99928 \\xe0&\\x0d\\xb8 \\xe0&\\x0d\\xb8)"
     )
-    assert query_to_str(query_parser.parse_query("val:..12346")) == "Query()"
 
     assert (
         query_to_str(
@@ -283,8 +282,8 @@ def test_single_term_no_default_fields(query_parser):
 
 def test_field_with_no_value(query_parser):
     query_parser.ignore_missing_field_values = False
-    with pytest.raises(QueryParser.Error, match=r"\bfoo\b.*at position 4"):
-        query_parser.parse_query("foo:")
+    with pytest.raises(QueryParser.Error, match=r"\bname\b.*at position 5"):
+        query_parser.parse_query("name:")
 
     query_parser.schema = Schema(
         [DatabaseField("name", "XNAME"), DatabaseField("path", "XPATH")]
@@ -301,15 +300,13 @@ def test_field_with_no_value(query_parser):
 
 
 def test_unknown_field(query_parser):
-    assert (
-        query_to_tuple(query_parser.parse_query("unknown:text")) == EMPTY_MATCH
-    )
-    assert (
+    with pytest.raises(QueryParser.Error, match="Unknown field"):
+        query_to_tuple(query_parser.parse_query("unknown:text"))
+
+    with pytest.raises(QueryParser.Error, match="Unknown field"):
         query_to_tuple(
             query_parser.parse_query("name:foo unknown:text name:bar")
         )
-        == EMPTY_MATCH
-    )
 
 
 def test_multiple_default_fields(query_parser):
