@@ -127,11 +127,15 @@ $ bdx search -n 5 -f '{size:0>10}|{section:<30}|{name}' tree
 
         bdx search foo size:100..200
 
-8. Search for literal strings:
+8. Search for symbols by relative path:
 
-        bdx search 'path:"/path/to/some/file.o"'
+        bdx search 'path:./build/module/*'
 
-9. Search for big symbols in some section:
+9. Search for string literals:
+
+        bdx search 'path:"/path/to/File With Spaces.o"'
+
+10. Search for big symbols in some section:
 
         bdx search section:.rodata AND size:1000..
 

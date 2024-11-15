@@ -170,6 +170,22 @@ class PathField(DatabaseField):
         # Also index the basename
         super().index(document, path.name)
 
+    def make_query(self, value: str, wildcard: bool = False) -> xapian.Query:
+        """Make a query for the path in ``value``."""
+        query = super().make_query(value, wildcard)
+
+        if not value.startswith("/"):
+            try:
+                value = str((Path() / value).absolute().resolve())
+                rhs_query = super().make_query(value, wildcard)
+
+                query = xapian.Query(xapian.Query.OP_OR, query, rhs_query)
+
+            except ValueError:
+                pass
+
+        return query
+
 
 class RelocationsField(DatabaseField):
     """Represents a field for the list of relocations in a given symbol."""

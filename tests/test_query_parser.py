@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 import xapian
 from pytest import fixture
@@ -247,14 +249,9 @@ def test_path_field(query_parser):
     query_parser.default_fields = ["name", "path"]
     assert query_to_tuple(query_parser.parse_query("FOO")) == (
         OR,
-        (
-            LEAF_TERM,
-            "XNAMEFOO",
-        ),
-        (
-            LEAF_TERM,
-            "XPATHFOO",
-        ),
+        (LEAF_TERM, "XNAMEFOO"),
+        (LEAF_TERM, "XPATHFOO"),
+        (LEAF_TERM, f"XPATH{(Path() / 'FOO').absolute().resolve()}"),
     )
 
 
