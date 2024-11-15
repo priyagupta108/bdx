@@ -4,6 +4,7 @@ from typing import Optional
 
 import xapian
 
+from bdx import debug
 from bdx.index import Schema
 
 
@@ -35,7 +36,7 @@ class Token(Enum):
             (Token.String, re.compile(r'"([^"]+)"')),
             (Token.Field, re.compile(r"([a-zA-Z_]+):")),
             (Token.Wildcard, re.compile(r"[*]")),
-            (Token.Term, re.compile(r"([a-zA-Z0-9_.]+)")),
+            (Token.Term, re.compile(r"([^\s()*]+)")),
         ]
 
 
@@ -45,14 +46,10 @@ _MATCH_ALL = xapian.Query.MatchAll  # pyright: ignore
 class QueryParser:
     """Custom query parser for the database."""
 
-    ignore_unknown_tokens = True
     ignore_missing_field_values = True
 
     class Error(RuntimeError):
         """Parsing error."""
-
-    class UnknownTokenError(Error):
-        """Unknown token error."""
 
     # Grammar:
     #
@@ -75,7 +72,7 @@ class QueryParser:
     # field = [a-zA-Z_]+ ":"
     # string = '"' [^"]+ '"'
     # wildcard = [*]
-    # term = [a-zA-Z0-9_.]*
+    # term = [^\s()*]*
 
     def __init__(
         self,
@@ -119,8 +116,7 @@ class QueryParser:
 
         self._next_token()
         self._parse_query()
-        if self._token != Token.EOF:
-            raise QueryParser.Error()
+        self._expect(Token.EOF, "EOF")
         if self._parsed is None:
             return xapian.Query()
         return self._parsed
@@ -151,13 +147,8 @@ class QueryParser:
                         self._value = ""
                     return
 
-            if self.ignore_unknown_tokens:
-                self._pos += 1
-            else:
-                break
-
-        msg = f'Invalid token beginning at pos {pos} ("{query[:6]}...")'
-        raise QueryParser.UnknownTokenError(msg)
+            debug(f"Warning: unknown token at {self._pos}")
+            self._pos += 1
 
     def _parse_query(self):
         return self._parse_boolexpr()

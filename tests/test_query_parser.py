@@ -90,18 +90,6 @@ def test_not(query_parser):
         query_parser.parse_query("!NOT")
 
 
-def test_invalid_token(query_parser):
-    query_parser.ignore_unknown_tokens = False
-    with pytest.raises(QueryParser.UnknownTokenError):
-        query_parser.parse_query(":")
-    with pytest.raises(QueryParser.UnknownTokenError):
-        query_parser.parse_query("#")
-    with pytest.raises(QueryParser.UnknownTokenError):
-        query_parser.parse_query("%")
-    with pytest.raises(QueryParser.UnknownTokenError):
-        query_parser.parse_query("foo :")
-
-
 def test_single_term(query_parser):
     assert query_to_tuple(query_parser.parse_query("foo")) == (
         LEAF_TERM,
@@ -342,37 +330,35 @@ def test_multiple_default_fields(query_parser):
     )
 
 
-def test_ignores_invalid_tokens(query_parser):
-    query_parser.ignore_unknown_tokens = True
+def test_weird_tokens(query_parser):
     assert query_to_tuple(query_parser.parse_query("  /~?# foo ?$@#  ")) == (
-        LEAF_TERM,
-        "XNAMEfoo",
-    )
-    assert query_to_tuple(query_parser.parse_query("  !/~?# foo ?$@#  ")) == (
-        AND_NOT,
-        MATCH_ALL,
-        (
-            LEAF_TERM,
-            "XNAMEfoo",
-        ),
-    )
-    assert query_to_tuple(query_parser.parse_query("  #name://foo//  ")) == (
-        LEAF_TERM,
-        "XNAMEfoo",
-    )
-    assert query_to_tuple(
-        query_parser.parse_query("  #name://foo//bar  ")
-    ) == (
         AND,
         (
             LEAF_TERM,
+            "XNAME/~?#",
+        ),
+        (
+            LEAF_TERM,
             "XNAMEfoo",
         ),
         (
             LEAF_TERM,
-            "XNAMEbar",
+            "XNAME?$@#",
         ),
     )
+    assert query_to_tuple(query_parser.parse_query("  !/~?# foo ?$@#  ")) == (
+        AND,
+        (AND_NOT, MATCH_ALL, (LEAF_TERM, "XNAME/~?#")),
+        (LEAF_TERM, "XNAMEfoo"),
+        (LEAF_TERM, "XNAME?$@#"),
+    )
+    assert query_to_tuple(query_parser.parse_query("  #name://foo//  ")) == (
+        LEAF_TERM,
+        "XNAME#name://foo//",
+    )
+    assert query_to_tuple(
+        query_parser.parse_query("  #name://foo//bar  ")
+    ) == (LEAF_TERM, "XNAME#name://foo//bar")
 
 
 def test_or(query_parser):
