@@ -281,6 +281,19 @@ class Schema(Mapping):
 class SymbolIndex:
     """Easy interface for a xapian database, with schema support."""
 
+    @dataclass(frozen=True)
+    class MatchResults:
+        """Contains match results for search operation."""
+
+        count: int
+        mset: xapian.MSet = field(repr=False)
+
+        def __iter__(self) -> Iterator[Symbol]:
+            for match in self.mset:
+                document = match.document
+                pickled_data = document.get_data()
+                yield pickle.loads(pickled_data)
+
     SCHEMA = Schema(
         [
             PathField("path", "XP"),
@@ -553,8 +566,8 @@ class SymbolIndex:
         query: str | xapian.Query,
         first: int = 0,
         limit: Optional[int] = None,
-    ) -> Iterator[Symbol]:
-        """Yield symbols matching the given ``query``."""
+    ) -> "SymbolIndex.MatchResults":
+        """Find symbols matching the given ``query``."""
         db = self._live_db()
 
         if limit is None:
@@ -569,10 +582,8 @@ class SymbolIndex:
         enquire.set_query(query)
 
         try:
-            for match in enquire.get_mset(first, limit):
-                document = match.document
-                pickled_data = document.get_data()
-                yield pickle.loads(pickled_data)
+            mset = enquire.get_mset(first, limit)
+            return self.MatchResults(mset.size(), mset)
         except xapian.DatabaseModifiedError as e:
             raise SymbolIndex.ModifiedError from e
 
