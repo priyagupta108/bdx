@@ -21,6 +21,7 @@ class Token(Enum):
     And = "AND"
     Or = "OR"
     Not = "NOT"
+    MatchAll = "MatchAll"
     Wildcard = "WILDCARD"
 
     @staticmethod
@@ -35,6 +36,7 @@ class Token(Enum):
             (Token.Rparen, re.compile(r"[)]")),
             (Token.String, re.compile(r'"([^"]+)"')),
             (Token.Field, re.compile(r"([a-zA-Z_]+):")),
+            (Token.MatchAll, re.compile(r"[*]:[*]")),
             (Token.Wildcard, re.compile(r"[*]")),
             (Token.Term, re.compile(r"([^\s()*]+)")),
         ]
@@ -208,7 +210,10 @@ class QueryParser:
     def _parse_expr(self):
         retval = True
 
-        if self._token == Token.Not:
+        if self._token == Token.MatchAll:
+            self._next_token()
+            self._parsed = _MATCH_ALL
+        elif self._token == Token.Not:
             self._next_token()
             retval = self._parse_expr()
             if not retval:

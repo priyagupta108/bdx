@@ -183,6 +183,15 @@ def test_auto_wildcard(query_parser):
     )
 
 
+def test_match_all(query_parser):
+    assert query_to_tuple(query_parser.parse_query("*:*")) == MATCH_ALL
+    assert query_to_tuple(query_parser.parse_query("NOT *:*")) == (
+        AND_NOT,
+        MATCH_ALL,
+        MATCH_ALL,
+    )
+
+
 def test_intrange(query_parser):
     slot = 99928
     query_parser.schema = Schema(
