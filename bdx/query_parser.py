@@ -63,6 +63,7 @@ class QueryParser:
     #
     # expr =
     #         NOT expr
+    #         | matchall
     #         | "(" query ")"
     #         | field value
     #         | field wildcard
@@ -71,6 +72,7 @@ class QueryParser:
     # value = (term | string) [wildcard]
     #
     # NOT = NOT|!
+    # matchall = [*]:[*]
     # field = [a-zA-Z_]+ ":"
     # string = '"' [^"]+ '"'
     # wildcard = [*]
