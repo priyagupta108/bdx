@@ -76,7 +76,7 @@ Generate an SVG image showing at most 20 routes from symbol `main` in
 `main.o` to all symbols in section `.text` in files matching wildcard
 `Algorithms_*`:
 
-    bdx graph 'main path:main.o' 'section:".text" AND path:Algorithms*' -n 20 | dot -Tsvg > graph.svg'
+    bdx graph 'main path:main.o' 'section:".text" AND path:Algorithms*' -n 20 | dot -Tsvg > graph.svg
 
 Example graphs: ![BFS](./examples/bfs.svg) ![DFS](./examples/dfs.svg)
 
