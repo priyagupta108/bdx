@@ -1,9 +1,16 @@
 # bdx #
 
-An indexer for binary build directories.
+An indexer and graph generator for binary build directories.
 
-This tool can be used to quickly search where an ELF symbol is defined
-in a build directory.
+This tool can be used to quickly search where an ELF symbol matching some
+criteria is defined in a directory and generate graphs for various queries.
+
+Features:
+
+- Parallel, incremental indexing using sharded Xapian database
+- Indexes cross-references by analyzing ELF relocations
+- Query the database with a simple query language and custom output formats
+- Generate symbol reference graphs in DOT format
 
 ## Installation ##
 
@@ -14,6 +21,10 @@ With pip:
 Or, for development:
 
     pip install -e .[dev]
+
+For optional graph generation (this installs `pygraphviz`):
+
+    pip install .[graphs]
 
 [xapian][xapian] is required to be installed on the system.
 
@@ -58,6 +69,18 @@ Available options:
 
 - `min_symbol_size` - (default 1) only index symbols with size equal to or
   greater than this.
+
+### Graph generation ###
+
+Generate an SVG image showing at most 20 routes from symbol `main` in
+`main.o` to all symbols in section `.text` in files matching wildcard
+`Algorithms_*`:
+
+    bdx graph 'main path:main.o' 'section:".text" AND path:Algorithms*' -n 20 | dot -Tsvg > graph.svg'
+
+By default this prefers shorter paths by using the BFS algorithm, the `-D`
+switch will use depth-first-search algorithm which can sometimes much bigger
+huge graphs - but in some cases can be quicker.
 
 ### Searching ###
 

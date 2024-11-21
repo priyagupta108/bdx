@@ -33,6 +33,9 @@ dev = [
     "pyright",
     "sortedcontainers-stubs",
 ]
+graphs = [
+    "pygraphviz",
+]
 
 [project.urls]
 Homepage = "https://github.com/mkcms/bdx"

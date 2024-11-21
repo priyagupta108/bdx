@@ -574,9 +574,7 @@ class SymbolIndex:
             limit = db.get_doccount()
 
         if isinstance(query, str):
-            query = self._parse_query(query)
-
-        debug("Search query: {}", query)
+            query = self.parse_query(query)
 
         enquire = xapian.Enquire(db)
         enquire.set_query(query)
@@ -584,8 +582,21 @@ class SymbolIndex:
         try:
             mset = enquire.get_mset(first, limit)
             return self.MatchResults(mset.size(), mset)
+        except xapian.InvalidArgumentError:
+            return self.MatchResults(0, xapian.MSet())
         except xapian.DatabaseModifiedError as e:
             raise SymbolIndex.ModifiedError from e
+
+    def parse_query(self, query: str) -> xapian.Query:
+        """Parse the given query string, returning a Query object."""
+        from bdx.query_parser import QueryParser
+
+        query_parser = QueryParser(
+            SymbolIndex.SCHEMA,
+            default_fields=["name"],
+            auto_wildcard=True,
+        )
+        return query_parser.parse_query(query)
 
     def _live_db(self) -> xapian.Database | xapian.WritableDatabase:
         if self._db is None:
@@ -599,16 +610,6 @@ class SymbolIndex:
             msg = "SymbolIndex is open for reading only"
             raise SymbolIndex.ReadOnlyError(msg)
         return db
-
-    def _parse_query(self, query: str) -> xapian.Query:
-        from bdx.query_parser import QueryParser
-
-        query_parser = QueryParser(
-            SymbolIndex.SCHEMA,
-            default_fields=["name"],
-            auto_wildcard=True,
-        )
-        return query_parser.parse_query(query)
 
 
 @dataclass
@@ -827,5 +828,11 @@ def search_index(
         query = "*:*"
 
     with SymbolIndex.open(index_path, readonly=True) as index:
-        for symbol in index.search(query, limit=limit):
+        parsed_query = index.parse_query(query)
+        debug("Search query: {}", parsed_query)
+
+        results = index.search(parsed_query, limit=limit)
+        debug("Number of results: {}", results.count)
+
+        for symbol in results:
             consumer(symbol)

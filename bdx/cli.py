@@ -11,6 +11,7 @@ from typing import Optional
 import click
 from click.shell_completion import CompletionItem
 from click.types import BoolParamType, IntRange
+from tqdm import tqdm
 
 import bdx
 from bdx import debug, error, info, log
@@ -319,6 +320,73 @@ def files(_directory, index_path):
     with SymbolIndex.open(index_path, readonly=True) as index:
         for path in index.all_files():
             print(path)
+
+
+@cli.command()
+@_common_options(index_must_exist=True)
+@click.argument(
+    "from_query",
+    nargs=1,
+)
+@click.argument(
+    "to_query",
+    nargs=1,
+)
+@click.option(
+    "-n",
+    "--num-routes",
+    type=click.IntRange(min=0),
+    default=1,
+    help="Generate at most N routes (0=infinity)",
+)
+@click.option(
+    "-D",
+    "--depth-first-search",
+    is_flag=True,
+    help="If provided, use DFS algorithm",
+)
+@click.option(
+    "-d",
+    "--demangle-names/--no-demangle-names",
+    default=True,
+    help="Use c++filt to demangle C++ names and use them as node labels.",
+)
+def graph(
+    _directory,
+    index_path,
+    from_query,
+    to_query,
+    num_routes,
+    depth_first_search,
+    demangle_names,
+):
+    """Generate a reference graph in DOT format from two queries.
+
+    For all symbols that match TO_QUERY, this command will find all
+    direct and indirect references that match FROM_QUERY, and
+    generate a graph with these two groups as clusters, connected by
+    intermediate nodes.
+
+    This can be used to visualize how a symbol is referenced
+    throughout a codebase.
+
+    """
+    from bdx.graph import generate_graph
+
+    visit_progress_bar = tqdm(desc="Nodes visited", unit="symbols")
+    found_routes_progress_bar = tqdm(desc="Found", unit="routes")
+
+    graph = generate_graph(
+        index_path,
+        from_query,
+        to_query,
+        num_routes=num_routes if num_routes else None,
+        depth_first_search=depth_first_search,
+        demangle_names=demangle_names,
+        on_symbol_visited=visit_progress_bar.update,
+        on_route_found=found_routes_progress_bar.update,
+    )
+    print(graph)
 
 
 if __name__ == "__main__":

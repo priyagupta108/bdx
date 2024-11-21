@@ -8,6 +8,7 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime
 from functools import cached_property, total_ordering
 from pathlib import Path
+from subprocess import check_output
 from typing import Iterator, Optional
 
 from elftools.elf.elffile import ELFFile
@@ -28,11 +29,18 @@ class Symbol:
     section: str
     address: int
     size: int
-    relocations: list[str]
+    relocations: list[str] = field(hash=False)
     mtime: int
 
     def __lt__(self, other):
         return self.address < other.address
+
+    def demangle_name(self):
+        """Return the demangled name."""
+        try:
+            return check_output(["c++filt", self.name]).decode().strip()
+        except Exception:
+            return self.name
 
 
 def _read_symtab(
