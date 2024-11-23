@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections import deque
+from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Iterator, Optional
 
@@ -10,11 +12,75 @@ from bdx.binary import Symbol
 from bdx.index import SymbolIndex, sigint_catcher
 
 
+class GraphAlgorithm(Enum):
+    """Enumeration for graph search algorithms."""
+
+    BFS = "BFS"
+    DFS = "DFS"
+
+
+def _find_references(index: SymbolIndex, symbol: Symbol) -> set[Symbol]:
+    cache = getattr(index, "__reference_cache", None)
+    if cache is None:
+        cache = dict()
+        setattr(index, "__reference_cache", cache)
+
+    try:
+        return cache[symbol]
+    except KeyError:
+        query = index.schema["relocations"].make_query(symbol.name)
+        res = set(index.search(query))
+        cache[symbol] = res
+        return res
+
+
+def _bfs_or_dfs_search(
+    index: SymbolIndex,
+    start_set: set[Symbol],
+    to_query_set: set[Symbol],
+    algo: GraphAlgorithm,
+    should_quit: Callable[[], bool],
+    on_symbol_visited: Callable[[], Any],
+) -> Iterator[list[Symbol]]:
+    queue: deque[tuple[Symbol, list[Symbol]]] = deque(
+        [(sym, []) for sym in to_query_set]
+    )
+
+    while queue and not should_quit():
+        symbol, came_from = queue.popleft()
+
+        detail_log(
+            "Visit: {} From: {} (depth {})",
+            symbol.name,
+            came_from[0].name if came_from else None,
+            len(came_from),
+        )
+
+        if symbol in came_from:
+            continue
+
+        on_symbol_visited()
+
+        if symbol in start_set and came_from:
+            yield [symbol, *came_from]
+            continue
+
+        referenced_by = [
+            (sym, [symbol, *came_from])
+            for sym in _find_references(index, symbol)
+        ]
+
+        if algo == GraphAlgorithm.DFS:
+            queue.extendleft(referenced_by)
+        else:
+            queue.extend(referenced_by)
+
+
 def generate_graph(
     index_path: Path,
     from_query: str,
     to_query: str,
-    depth_first_search: bool = False,
+    algo: GraphAlgorithm = GraphAlgorithm.BFS,
     num_routes: Optional[int] = 1,
     demangle_names: bool = True,
     on_symbol_visited: Callable[[], Any] = lambda: None,
@@ -29,8 +95,7 @@ def generate_graph(
         index_path: The index to generate a graph for.
         from_query: Symbols matching this query we will be trying to reach.
         to_query: We will start from symbols matching this query.
-        depth_first_search: If True, use DFS algorithm, otherwise use
-            breadth first search.
+        algo: The algorithm to use.
         num_routes: Exit after finding that many routes
             (if None, generate them infinitely).
         demangle_names: If True, all nodes will have attribute "label"
@@ -64,64 +129,17 @@ def generate_graph(
         if num_routes is None:
             num_routes = 9999999999999
 
-        end_set = set(index.search(to_query))
-        start_set = set(index.search(from_query))
+        to_query_set = set(index.search(to_query))
+        from_query_set = set(index.search(from_query))
 
         debug(
             "Start set has length {}, end set has length {}",
-            len(start_set),
-            len(end_set),
+            len(from_query_set),
+            len(to_query_set),
         )
 
-        if not end_set or not start_set:
+        if not to_query_set or not from_query_set:
             return graph
-
-        refs_cache: dict[Symbol, set[Symbol]] = dict()
-
-        def find_references(symbol: Symbol) -> set[Symbol]:
-            res = refs_cache.get(symbol, None)
-            if res:
-                return res
-
-            query = index.schema["relocations"].make_query(symbol.name)
-            res = set(index.search(query))
-            refs_cache[symbol] = res
-            return res
-
-        def find_routes() -> Iterator[list[Symbol]]:
-            queue: list[tuple[Symbol, list[Symbol]]] = [
-                (sym, []) for sym in end_set
-            ]
-
-            while queue and not interrupted():
-                symbol, came_from = queue.pop(0)
-
-                detail_log(
-                    "Visit: {} From: {} (depth {})",
-                    symbol.name,
-                    came_from[0].name if came_from else None,
-                    len(came_from),
-                )
-
-                if symbol in came_from:
-                    continue
-
-                on_symbol_visited()
-
-                if symbol in start_set and came_from:
-                    yield [symbol, *came_from]
-                    continue
-
-                referenced_by = [
-                    (sym, [symbol, *came_from])
-                    for sym in find_references(symbol)
-                ]
-
-                if depth_first_search:
-                    referenced_by.extend(queue)
-                    queue = referenced_by
-                else:
-                    queue.extend(referenced_by)
 
         def add_node(graph: AGraph, symbol: Symbol):
             graph.add_node(symbol.name)
@@ -134,7 +152,20 @@ def generate_graph(
             attr["bdx.section"] = symbol.section
             attr["bdx.size"] = symbol.size
 
-        for i, route in enumerate(find_routes()):
+        if algo in [GraphAlgorithm.DFS, GraphAlgorithm.BFS]:
+            routes = _bfs_or_dfs_search(
+                index,
+                from_query_set,
+                to_query_set,
+                algo,
+                interrupted,
+                on_symbol_visited,
+            )
+        else:
+            msg = f"Unknown algorithm: {algo}"
+            raise ValueError(msg)
+
+        for i, route in enumerate(routes):
             on_route_found()
 
             trace(
@@ -157,9 +188,9 @@ def generate_graph(
                 break
 
         for node in nodes:
-            if node in end_set:
+            if node in to_query_set:
                 add_node(to_subgraph, node)
-            elif node in start_set:
+            elif node in from_query_set:
                 add_node(from_subgraph, node)
             else:
                 add_node(graph, node)

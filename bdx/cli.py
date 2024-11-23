@@ -17,6 +17,7 @@ import bdx
 from bdx import debug, error, info, log
 from bdx.binary import BinaryDirectory, Symbol, find_compilation_database
 # fmt: off
+from bdx.graph import GraphAlgorithm
 from bdx.index import (IndexingOptions, SymbolIndex, index_binary_directory,
                        search_index)
 from bdx.query_parser import QueryParser
@@ -322,6 +323,20 @@ def files(_directory, index_path):
             print(path)
 
 
+class GraphAlgorithmParamType(click.Choice):
+    """Click parameter type for graph --algorithm."""
+
+    OPTIONS = GraphAlgorithm.__members__
+
+    def __init__(self):
+        """Initialize this param type instance."""
+        super().__init__(list(self.OPTIONS))
+
+    def convert(self, value, param, ctx):
+        """Convert the given value to correct type, or error out."""
+        return GraphAlgorithm(super().convert(value, param, ctx))
+
+
 @cli.command()
 @_common_options(index_must_exist=True)
 @click.argument(
@@ -340,10 +355,11 @@ def files(_directory, index_path):
     help="Generate at most N routes (0=infinity)",
 )
 @click.option(
-    "-D",
-    "--depth-first-search",
-    is_flag=True,
-    help="If provided, use DFS algorithm",
+    "-a",
+    "--algorithm",
+    type=GraphAlgorithmParamType(),
+    default="BFS",
+    help="The algorithm to choose",
 )
 @click.option(
     "-d",
@@ -357,7 +373,7 @@ def graph(
     from_query,
     to_query,
     num_routes,
-    depth_first_search,
+    algorithm,
     demangle_names,
 ):
     """Generate a reference graph in DOT format from two queries.
@@ -381,7 +397,7 @@ def graph(
         from_query,
         to_query,
         num_routes=num_routes if num_routes else None,
-        depth_first_search=depth_first_search,
+        algo=algorithm,
         demangle_names=demangle_names,
         on_symbol_visited=visit_progress_bar.update,
         on_route_found=found_routes_progress_bar.update,

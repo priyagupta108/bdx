@@ -80,9 +80,9 @@ Generate an SVG image showing at most 20 routes from symbol `main` in
 
 Example graphs: ![BFS](./examples/bfs.svg) ![DFS](./examples/dfs.svg)
 
-By default this prefers shorter paths by using the BFS algorithm, the `-D`
-switch will use depth-first-search algorithm which can sometimes much bigger
-huge graphs - but in some cases can be quicker.
+By default this prefers shorter paths by using the BFS algorithm, the
+`--algorithm DFS` option will use depth-first-search algorithm which can
+sometimes generate much bigger graphs - but in some cases can be quicker.
 
 ### Searching ###
 
