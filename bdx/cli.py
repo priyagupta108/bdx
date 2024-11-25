@@ -17,12 +17,18 @@ import bdx
 from bdx import debug, error, info, log
 from bdx.binary import BinaryDirectory, Symbol, find_compilation_database
 # fmt: off
-from bdx.graph import GraphAlgorithm
 from bdx.index import (IndexingOptions, SymbolIndex, index_binary_directory,
                        search_index)
 from bdx.query_parser import QueryParser
 
 # fmt: on
+
+try:
+    import bdx.graph
+
+    have_graphs = True
+except ImportError:
+    have_graphs = False
 
 
 def guess_directory_from_index_path(
@@ -323,86 +329,86 @@ def files(_directory, index_path):
             print(path)
 
 
-class GraphAlgorithmParamType(click.Choice):
-    """Click parameter type for graph --algorithm."""
+if have_graphs:
+    from bdx.graph import GraphAlgorithm, generate_graph
 
-    OPTIONS = GraphAlgorithm.__members__
+    class GraphAlgorithmParamType(click.Choice):
+        """Click parameter type for graph --algorithm."""
 
-    def __init__(self):
-        """Initialize this param type instance."""
-        super().__init__(list(self.OPTIONS))
+        OPTIONS = GraphAlgorithm.__members__
 
-    def convert(self, value, param, ctx):
-        """Convert the given value to correct type, or error out."""
-        return GraphAlgorithm(super().convert(value, param, ctx))
+        def __init__(self):
+            """Initialize this param type instance."""
+            super().__init__(list(self.OPTIONS))
 
+        def convert(self, value, param, ctx):
+            """Convert the given value to correct type, or error out."""
+            return GraphAlgorithm(super().convert(value, param, ctx))
 
-@cli.command()
-@_common_options(index_must_exist=True)
-@click.argument(
-    "from_query",
-    nargs=1,
-)
-@click.argument(
-    "to_query",
-    nargs=1,
-)
-@click.option(
-    "-n",
-    "--num-routes",
-    type=click.IntRange(min=0),
-    default=1,
-    help="Generate at most N routes (0=infinity)",
-)
-@click.option(
-    "-a",
-    "--algorithm",
-    type=GraphAlgorithmParamType(),
-    default="BFS",
-    help="The algorithm to choose",
-)
-@click.option(
-    "-d",
-    "--demangle-names/--no-demangle-names",
-    default=True,
-    help="Use c++filt to demangle C++ names and use them as node labels.",
-)
-def graph(
-    _directory,
-    index_path,
-    from_query,
-    to_query,
-    num_routes,
-    algorithm,
-    demangle_names,
-):
-    """Generate a reference graph in DOT format from two queries.
-
-    For all symbols that match TO_QUERY, this command will find all
-    direct and indirect references that match FROM_QUERY, and
-    generate a graph with these two groups as clusters, connected by
-    intermediate nodes.
-
-    This can be used to visualize how a symbol is referenced
-    throughout a codebase.
-
-    """
-    from bdx.graph import generate_graph
-
-    visit_progress_bar = tqdm(desc="Nodes visited", unit="symbols")
-    found_routes_progress_bar = tqdm(desc="Found", unit="routes")
-
-    graph = generate_graph(
+    @cli.command()
+    @_common_options(index_must_exist=True)
+    @click.argument(
+        "from_query",
+        nargs=1,
+    )
+    @click.argument(
+        "to_query",
+        nargs=1,
+    )
+    @click.option(
+        "-n",
+        "--num-routes",
+        type=click.IntRange(min=0),
+        default=1,
+        help="Generate at most N routes (0=infinity)",
+    )
+    @click.option(
+        "-a",
+        "--algorithm",
+        type=GraphAlgorithmParamType(),
+        default="BFS",
+        help="The algorithm to choose",
+    )
+    @click.option(
+        "-d",
+        "--demangle-names/--no-demangle-names",
+        default=True,
+        help="Use c++filt to demangle C++ names and use them as node labels.",
+    )
+    def graph(
+        _directory,
         index_path,
         from_query,
         to_query,
-        num_routes=num_routes if num_routes else None,
-        algo=algorithm,
-        demangle_names=demangle_names,
-        on_symbol_visited=visit_progress_bar.update,
-        on_route_found=found_routes_progress_bar.update,
-    )
-    print(graph)
+        num_routes,
+        algorithm,
+        demangle_names,
+    ):
+        """Generate a reference graph in DOT format from two queries.
+
+        For all symbols that match TO_QUERY, this command will find all
+        direct and indirect references that match FROM_QUERY, and
+        generate a graph with these two groups as clusters, connected by
+        intermediate nodes.
+
+        This can be used to visualize how a symbol is referenced
+        throughout a codebase.
+
+        """
+        visit_progress_bar = tqdm(desc="Nodes visited", unit="symbols")
+        found_routes_progress_bar = tqdm(desc="Found", unit="routes")
+
+        graph = generate_graph(
+            index_path,
+            from_query,
+            to_query,
+            num_routes=num_routes if num_routes else None,
+            algo=algorithm,
+            demangle_names=demangle_names,
+            on_symbol_visited=visit_progress_bar.update,
+            on_route_found=found_routes_progress_bar.update,
+        )
+        print(graph)
 
 
 if __name__ == "__main__":
