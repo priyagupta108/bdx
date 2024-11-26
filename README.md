@@ -78,11 +78,13 @@ Generate an SVG image showing at most 20 routes from symbol `main` in
 
     bdx graph 'main path:main.o' 'section:".text" AND path:Algorithms*' -n 20 | dot -Tsvg > graph.svg
 
-Example graphs: ![BFS](./examples/bfs.svg) ![DFS](./examples/dfs.svg)
+Example graphs: ![ASTAR](./examples/astar.svg) ![BFS](./examples/bfs.svg) ![DFS](./examples/dfs.svg)
 
-By default this prefers shorter paths by using the BFS algorithm, the
-`--algorithm DFS` option will use depth-first-search algorithm which can
-sometimes generate much bigger graphs - but in some cases can be quicker.
+By default this generates paths by using the ASTAR algorithm, the `--algorithm
+BFS` or `--algorithm DFS` options will use
+breadth-first-search/depth-first-search algorithms which can generate different
+graphs and can be slower/faster depending on the index and the queries
+provided.
 
 ### Searching ###
 

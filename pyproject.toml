@@ -35,6 +35,7 @@ dev = [
 ]
 graphs = [
     "pygraphviz",
+    "astar",
 ]
 
 [project.urls]

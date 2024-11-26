@@ -366,7 +366,7 @@ if have_graphs:
         "-a",
         "--algorithm",
         type=GraphAlgorithmParamType(),
-        default="BFS",
+        default="ASTAR",
         help="The algorithm to choose",
     )
     @click.option(

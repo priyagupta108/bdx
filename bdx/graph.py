@@ -3,8 +3,9 @@ from __future__ import annotations
 from collections import deque
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Iterator, Optional
+from typing import Any, Callable, Iterable, Iterator, Optional
 
+import astar
 from pygraphviz import AGraph
 
 from bdx import debug, detail_log, trace
@@ -17,6 +18,7 @@ class GraphAlgorithm(Enum):
 
     BFS = "BFS"
     DFS = "DFS"
+    ASTAR = "ASTAR"
 
 
 def _get_neighbors(index: SymbolIndex, symbol: Symbol) -> set[Symbol]:
@@ -146,6 +148,58 @@ class DFS:
         return None
 
 
+class ASTAR(astar.AStar):
+    """Implementation of the A* algorithm."""
+
+    def __init__(
+        self,
+        index: SymbolIndex,
+        should_quit: Callable[[], bool],
+        on_symbol_visited: Callable[[], Any],
+    ):
+        """Initialize this searcher for given index.
+
+        Args:
+            index: The symbol index to search in.
+            should_quit: Function returning True if search should stop.
+            on_symbol_visited: Called on each symbol visited.
+
+        """
+        self.index = index
+        self.should_quit = should_quit
+        self.on_symbol_visited = on_symbol_visited
+
+    def search(
+        self, start: Symbol, goal: set[Symbol]
+    ) -> Optional[list[Symbol]]:
+        """Return a path from ``start`` to ``goal``, if it exists."""
+        res = self.astar(start, goal)
+        if res:
+            return list(res)
+
+        return None
+
+    def neighbors(self, node: Symbol) -> set[Symbol]:
+        """Get all the neighbors of given node."""
+        self.on_symbol_visited()
+        return _get_neighbors(self.index, node)
+
+    def distance_between(self, n1, n2) -> float:
+        """Get the distance between two nodes."""
+        return 1
+
+    def is_goal_reached(self, current: Symbol, goal: Iterable[Symbol]) -> bool:
+        """Return true if the given node is the end node."""
+        return current in goal
+
+    def heuristic_cost_estimate(
+        self, current: Symbol, goal: Iterable[Symbol]
+    ) -> float:
+        """Calculate the A* heuristic for given node and goal."""
+        # TODO: Use actual heuristic
+        return 1
+
+
 def _generate_paths(
     index: SymbolIndex,
     start_set: set[Symbol],
@@ -165,6 +219,8 @@ def _generate_paths(
         searcher = BFS(index, should_quit, on_symbol_visited)
     elif algo == GraphAlgorithm.DFS:
         searcher = DFS(index, should_quit, on_symbol_visited)
+    elif algo == GraphAlgorithm.ASTAR:
+        searcher = ASTAR(index, should_quit, on_symbol_visited)
     else:
         msg = f"Unknown algorithm: {algo}"
         raise ValueError(msg)
@@ -183,7 +239,7 @@ def generate_graph(
     index_path: Path,
     start_query: str,
     goal_query: str,
-    algo: GraphAlgorithm = GraphAlgorithm.BFS,
+    algo: GraphAlgorithm = GraphAlgorithm.ASTAR,
     num_routes: Optional[int] = 1,
     demangle_names: bool = True,
     on_symbol_visited: Callable[[], Any] = lambda: None,
