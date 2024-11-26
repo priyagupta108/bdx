@@ -348,11 +348,11 @@ if have_graphs:
     @cli.command()
     @_common_options(index_must_exist=True)
     @click.argument(
-        "from_query",
+        "start_query",
         nargs=1,
     )
     @click.argument(
-        "to_query",
+        "goal_query",
         nargs=1,
     )
     @click.option(
@@ -378,18 +378,18 @@ if have_graphs:
     def graph(
         _directory,
         index_path,
-        from_query,
-        to_query,
+        start_query,
+        goal_query,
         num_routes,
         algorithm,
         demangle_names,
     ):
         """Generate a reference graph in DOT format from two queries.
 
-        For all symbols that match TO_QUERY, this command will find all
-        direct and indirect references that match FROM_QUERY, and
-        generate a graph with these two groups as clusters, connected by
-        intermediate nodes.
+        For all symbols that match START_QUERY, this command will find
+        paths to symbols that match GOAL_QUERY, and generate a graph
+        with these two groups as clusters, connected by intermediate
+        nodes.
 
         This can be used to visualize how a symbol is referenced
         throughout a codebase.
@@ -400,8 +400,8 @@ if have_graphs:
 
         graph = generate_graph(
             index_path,
-            from_query,
-            to_query,
+            start_query,
+            goal_query,
             num_routes=num_routes if num_routes else None,
             algo=algorithm,
             demangle_names=demangle_names,
