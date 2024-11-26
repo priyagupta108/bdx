@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from collections import deque
 from enum import Enum
 from pathlib import Path
@@ -36,7 +37,7 @@ def _get_neighbors(index: SymbolIndex, symbol: Symbol) -> set[Symbol]:
         return res
 
 
-class BFS:
+class Searcher(ABC):
     """Breadth-first search."""
 
     def __init__(
@@ -56,6 +57,17 @@ class BFS:
         self.index = index
         self.should_quit = should_quit
         self.on_symbol_visited = on_symbol_visited
+
+    @abstractmethod
+    def search(
+        self, start: Symbol, goal: set[Symbol]
+    ) -> Optional[list[Symbol]]:
+        """Return a path from ``start`` to ``goal``, if it exists."""
+        pass
+
+
+class BFS(Searcher):
+    """Breadth-first search."""
 
     def search(
         self, start: Symbol, goal: set[Symbol]
@@ -92,26 +104,8 @@ class BFS:
         return None
 
 
-class DFS:
+class DFS(Searcher):
     """Depth-first search."""
-
-    def __init__(
-        self,
-        index: SymbolIndex,
-        should_quit: Callable[[], bool],
-        on_symbol_visited: Callable[[], Any],
-    ):
-        """Initialize this searcher for given index.
-
-        Args:
-            index: The symbol index to search in.
-            should_quit: Function returning True if search should stop.
-            on_symbol_visited: Called on each symbol visited.
-
-        """
-        self.index = index
-        self.should_quit = should_quit
-        self.on_symbol_visited = on_symbol_visited
 
     def search(
         self, start: Symbol, goal: set[Symbol]
@@ -148,26 +142,8 @@ class DFS:
         return None
 
 
-class ASTAR(astar.AStar):
-    """Implementation of the A* algorithm."""
-
-    def __init__(
-        self,
-        index: SymbolIndex,
-        should_quit: Callable[[], bool],
-        on_symbol_visited: Callable[[], Any],
-    ):
-        """Initialize this searcher for given index.
-
-        Args:
-            index: The symbol index to search in.
-            should_quit: Function returning True if search should stop.
-            on_symbol_visited: Called on each symbol visited.
-
-        """
-        self.index = index
-        self.should_quit = should_quit
-        self.on_symbol_visited = on_symbol_visited
+class ASTAR(Searcher, astar.AStar):
+    """Wrapper for the A* algorithm."""
 
     def search(
         self, start: Symbol, goal: set[Symbol]
@@ -214,7 +190,7 @@ def _generate_paths(
     # symbol, not "what it references".  We reverse the paths later.
     start_set, goal_set = goal_set, start_set
 
-    searcher: Any = None
+    searcher: Optional[Searcher] = None
 
     if algo == GraphAlgorithm.BFS:
         searcher = BFS(index, should_quit, on_symbol_visited)
