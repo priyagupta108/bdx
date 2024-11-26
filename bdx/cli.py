@@ -395,8 +395,13 @@ if have_graphs:
         throughout a codebase.
 
         """
+        progress_bar = tqdm(unit="nodes")
         visit_progress_bar = tqdm(desc="Nodes visited", unit="symbols")
         found_routes_progress_bar = tqdm(desc="Found", unit="routes")
+
+        def on_progress(num_done, num_total):
+            progress_bar.total = num_total
+            progress_bar.update()
 
         graph = generate_graph(
             index_path,
@@ -405,6 +410,7 @@ if have_graphs:
             num_routes=num_routes if num_routes else None,
             algo=algorithm,
             demangle_names=demangle_names,
+            on_progress=on_progress,
             on_symbol_visited=visit_progress_bar.update,
             on_route_found=found_routes_progress_bar.update,
         )

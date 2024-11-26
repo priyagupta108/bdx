@@ -206,6 +206,7 @@ def _generate_paths(
     goal_set: set[Symbol],
     algo: GraphAlgorithm,
     should_quit: Callable[[], bool],
+    on_progress: Callable[[int, int], Any],
     on_symbol_visited: Callable[[], Any],
 ) -> Iterator[list[Symbol]]:
 
@@ -225,7 +226,9 @@ def _generate_paths(
         msg = f"Unknown algorithm: {algo}"
         raise ValueError(msg)
 
-    for start in start_set:
+    for i, start in enumerate(start_set):
+        on_progress(i, len(start_set))
+
         path = searcher.search(start, goal_set)
         if not path:
             continue
@@ -242,6 +245,7 @@ def generate_graph(
     algo: GraphAlgorithm = GraphAlgorithm.ASTAR,
     num_routes: Optional[int] = 1,
     demangle_names: bool = True,
+    on_progress: Callable[[int, int], Any] = lambda x, y: None,
     on_symbol_visited: Callable[[], Any] = lambda: None,
     on_route_found: Callable[[], Any] = lambda: None,
 ) -> AGraph:
@@ -259,6 +263,7 @@ def generate_graph(
             (if None, generate them infinitely).
         demangle_names: If True, all nodes will have attribute "label"
             containing the demangled name.
+        on_progress: Progress callback called with (NUM_DONE, NUM_TOTAL) args.
         on_symbol_visited: Called for each symbol visited.
         on_route_found: Called after a single route is found.
 
@@ -318,6 +323,7 @@ def generate_graph(
                 goal_query_set,
                 algo,
                 interrupted,
+                on_progress,
                 on_symbol_visited,
             )
         ):
