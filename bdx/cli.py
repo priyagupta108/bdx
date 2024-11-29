@@ -272,7 +272,6 @@ def index(directory, index_path, opt, use_compilation_database):
 )
 def search(_directory, index_path, query, num, format):
     """Search binary directory for symbols."""
-
     outdated_paths = set()
 
     @lru_cache
@@ -334,7 +333,10 @@ def search(_directory, index_path, query, num, format):
 
     if outdated_paths:
         log(
-            "Warning: {} or more files are newer than index, run `index` command to re-index",
+            (
+                "Warning: {} or more files are newer than index,"
+                " run `index` command to re-index"
+            ),
             len(outdated_paths),
         )
 
