@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import asdict
-from functools import wraps
+from functools import lru_cache, wraps
 from pathlib import Path
 from sys import exit, stdout
 from typing import Optional
@@ -273,6 +273,16 @@ def index(directory, index_path, opt, use_compilation_database):
 def search(_directory, index_path, query, num, format):
     """Search binary directory for symbols."""
 
+    outdated_paths = set()
+
+    @lru_cache
+    def is_outdated(symbol: Symbol):
+        try:
+            os_mtime = symbol.path.stat().st_mtime_ns
+        except Exception:
+            os_mtime = 0
+        return os_mtime != symbol.mtime
+
     def callback(symbol: Symbol):
         def valueconv(v):
             try:
@@ -308,6 +318,9 @@ def search(_directory, index_path, query, num, format):
                 )
                 exit(1)
 
+            if is_outdated(symbol):
+                outdated_paths.add(symbol.path)
+
     try:
         search_index(
             index_path=index_path,
@@ -318,6 +331,12 @@ def search(_directory, index_path, query, num, format):
     except QueryParser.Error as e:
         error(f"Invalid query: {str(e)}")
         exit(1)
+
+    if outdated_paths:
+        log(
+            "Warning: {} or more files are newer than index, run `index` command to re-index",
+            len(outdated_paths),
+        )
 
 
 @cli.command()
