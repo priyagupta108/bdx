@@ -257,9 +257,7 @@ class QueryParser:
                     f"Missing value for field {field} at position {self._pos}"
                 )
                 raise QueryParser.Error(msg)
-            if not value_present and ignore_missing_values:
-                if value_present:
-                    self._next_token()
+            elif not value_present:
                 self._parsed = self._empty
                 retval = True
             else:
