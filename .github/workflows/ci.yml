@@ -51,7 +51,6 @@ jobs:
           key: ${{ runner.os }}-${{ matrix.python-version }}-xapian-${{ hashFiles('**/xapian*.tar.xz') }}
 
       - name: Set up build system
-        if: steps.cache-xapian.outputs.cache-hit != 'true' || steps.cache-xapian-bindings.outputs.cache-hit != 'true'
         run: |
           # Ubuntu<24
           test -e /etc/apt/sources.list && \
@@ -60,8 +59,12 @@ jobs:
           sudo sed -i 's/^Types: deb/Types: deb deb-src/' /etc/apt/sources.list.d/*
 
           sudo apt-get update
-          sudo apt-get install build-essential zlib1g-dev
+          sudo apt-get install build-essential zlib1g-dev uuid-dev
           sudo apt-get build-dep libxapian-dev
+
+          # Install prerequisites for xapian-bindings.
+          # https://github.com/sphinx-doc/sphinx/issues/6524
+          pip install Sphinx
 
       - name: Build xapian
         if: steps.cache-xapian.outputs.cache-hit != 'true'
@@ -88,9 +91,6 @@ jobs:
 
       - name: Install xapian bindings
         run: |
-          # Install prerequisites for xapian-bindings.
-          # https://github.com/sphinx-doc/sphinx/issues/6524
-          pip install Sphinx
           cd /usr/local/src/xapian-bindings/build/
           sudo make install
 
