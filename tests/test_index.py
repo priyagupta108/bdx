@@ -1,6 +1,7 @@
 import os
 from contextlib import contextmanager
 from pathlib import Path
+from shutil import rmtree
 
 import pytest
 
@@ -101,6 +102,47 @@ def test_indexing(index_path):
             assert symbol.name == f"a_name{i}"
             assert symbol.section == ".bss"
             assert symbol.relocations == []
+
+
+def test_indexing_min_symbol_size(index_path):
+    for msize in [0, 1, 64, 65]:
+        try:
+            rmtree(index_path)
+        except FileNotFoundError:
+            pass
+
+        index_binary_directory(
+            FIXTURE_PATH, index_path, IndexingOptions(min_symbol_size=msize)
+        )
+
+        with SymbolIndex.open(index_path, readonly=True) as index:
+            symbols = set(index.search("*:*"))
+            by_name = {x.name: x for x in symbols}
+            assert symbols
+
+            for sym in symbols:
+                # One entry (with an empty name) per file is when
+                # no regular symbols were added
+                if sym.name:
+                    assert sym.size >= msize
+
+            if msize <= 64:
+                assert "top_level_symbol" in by_name
+            else:
+                assert "top_level_symbol" not in by_name
+
+
+def test_indexing_without_relocations(index_path):
+    index_binary_directory(
+        FIXTURE_PATH, index_path, IndexingOptions(index_relocations=False)
+    )
+
+    with SymbolIndex.open(index_path, readonly=True) as index:
+        symbols = list(index.search("*:*"))
+        assert symbols
+
+        for symbol in symbols:
+            assert not symbol.relocations
 
 
 def test_searching_by_wildcard(readonly_index):
