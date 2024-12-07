@@ -44,7 +44,7 @@ def test_indexing(index_path):
 
     with SymbolIndex.open(index_path, readonly=True) as index:
         symbols = index.search("*:*")
-        assert symbols.count == 6
+        assert symbols.count == 11
         by_name = {x.name: x for x in symbols}
 
         top_level_symbol = by_name["top_level_symbol"]
@@ -94,6 +94,29 @@ def test_indexing(index_path):
         assert c_function.relocations == [
             "foo",
         ]
+
+        for i in range(5):
+            symbol = by_name[f"a_name{i}"]
+            assert symbol.path == FIXTURE_PATH / "subdir" / "foo.c.o"
+            assert symbol.name == f"a_name{i}"
+            assert symbol.section == ".bss"
+            assert symbol.relocations == []
+
+
+def test_searching_by_wildcard(readonly_index):
+    symbols = set(readonly_index.search("name:a_*"))
+    assert symbols
+    for sym in symbols:
+        assert sym.name.startswith("a_")
+
+    # Wildcard not provided
+    assert not set(readonly_index.search("name:a_"))
+
+    # Automatically search by name
+    assert set(readonly_index.search("a_*")) == symbols
+
+    # Automatically append a wildcard if a field is not specified
+    assert set(readonly_index.search("a_")) == symbols
 
 
 def test_searching_by_size(readonly_index):
