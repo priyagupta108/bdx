@@ -1,4 +1,149 @@
-from bdx.index import SymbolNameField
+import os
+from contextlib import contextmanager
+from pathlib import Path
+
+import pytest
+
+# isort: off
+from bdx.index import (
+    IndexingOptions,
+    SymbolIndex,
+    SymbolNameField,
+    index_binary_directory,
+)
+
+# isort: on
+
+FIXTURE_PATH = Path(__file__).parent / "fixture"
+
+
+@contextmanager
+def chdir(dir):
+    old = os.getcwd()
+    try:
+        os.chdir(dir)
+        yield
+    finally:
+        os.chdir(old)
+
+
+@pytest.fixture
+def index_path(tmp_path):
+    return tmp_path / "index"
+
+
+@pytest.fixture
+def readonly_index(index_path):
+    index_binary_directory(FIXTURE_PATH, index_path, IndexingOptions())
+    with SymbolIndex.open(index_path, readonly=True) as index:
+        yield index
+
+
+def test_indexing(index_path):
+    index_binary_directory(FIXTURE_PATH, index_path, IndexingOptions())
+
+    with SymbolIndex.open(index_path, readonly=True) as index:
+        symbols = index.search("*:*")
+        assert symbols.count == 6
+        by_name = {x.name: x for x in symbols}
+
+        top_level_symbol = by_name["top_level_symbol"]
+        other_top_level_symbol = by_name["other_top_level_symbol"]
+        bar = by_name["bar"]
+        cxx_function = by_name["_Z12cxx_functionSt6vectorIiSaIiEE"]
+        foo = by_name["foo"]
+        c_function = by_name["c_function"]
+
+        assert top_level_symbol.path == FIXTURE_PATH / "toplev.c.o"
+        assert top_level_symbol.name == "top_level_symbol"
+        assert top_level_symbol.section == ".rodata"
+        assert top_level_symbol.address == 0
+        assert top_level_symbol.size == 64
+        assert top_level_symbol.relocations == []
+        assert top_level_symbol.mtime > 0
+
+        assert other_top_level_symbol.path == FIXTURE_PATH / "toplev.c.o"
+        assert other_top_level_symbol.name == "other_top_level_symbol"
+        assert other_top_level_symbol.section == ".data.rel.ro.local"
+        assert other_top_level_symbol.address == 0
+        assert other_top_level_symbol.size == 8
+        assert other_top_level_symbol.relocations == ["top_level_symbol"]
+        assert other_top_level_symbol.mtime > 0
+
+        assert bar.path == FIXTURE_PATH / "subdir" / "bar.cpp.o"
+        assert bar.name == "bar"
+        assert bar.section == ".bss"
+        assert bar.relocations == []
+
+        assert cxx_function.path == FIXTURE_PATH / "subdir" / "bar.cpp.o"
+        assert cxx_function.name == "_Z12cxx_functionSt6vectorIiSaIiEE"
+        assert cxx_function.section == ".text"
+        assert cxx_function.relocations == [
+            "bar",
+            "foo",
+        ]
+
+        assert foo.path == FIXTURE_PATH / "subdir" / "foo.c.o"
+        assert foo.name == "foo"
+        assert foo.section == ".bss"
+        assert foo.relocations == []
+
+        assert c_function.path == FIXTURE_PATH / "subdir" / "foo.c.o"
+        assert c_function.name == "c_function"
+        assert c_function.section == ".text"
+        assert c_function.relocations == [
+            "foo",
+        ]
+
+
+def test_searching_by_size(readonly_index):
+    symbols = readonly_index.search("size:8")
+    for sym in symbols:
+        assert sym.size == 8
+    names = [x.name for x in symbols]
+    assert "other_top_level_symbol" in names
+
+    symbols = readonly_index.search("size:32..128")
+    for sym in symbols:
+        assert 32 <= sym.size <= 128
+
+    names = [x.name for x in symbols]
+    assert "top_level_symbol" in names
+
+
+def test_searching_by_relative_path(readonly_index):
+    with chdir(FIXTURE_PATH):
+        all_symbols = set(readonly_index.search("*:*"))
+        subdir_symbols = set(readonly_index.search("path:subdir/*"))
+        assert subdir_symbols
+        for sym in subdir_symbols:
+            assert FIXTURE_PATH / "subdir" in sym.path.parents
+        for sym in all_symbols.difference(subdir_symbols):
+            assert FIXTURE_PATH / "subdir" not in sym.path.parents
+
+
+def test_searching_cxx(readonly_index):
+    symbols = readonly_index.search("cxx func")
+    by_name = {x.name: x for x in symbols}
+
+    sym = by_name["_Z12cxx_functionSt6vectorIiSaIiEE"]
+
+    assert sym in readonly_index.search("c fu vec")
+    assert sym in readonly_index.search("12 c f v")
+    assert sym in readonly_index.search("cxx fu")
+    assert sym in readonly_index.search("vector")
+    assert sym in readonly_index.search("func vec")
+
+
+def test_demangling(readonly_index):
+    symbols = readonly_index.search("cxx func")
+    by_name = {x.name: x for x in symbols}
+
+    sym = by_name["_Z12cxx_functionSt6vectorIiSaIiEE"]
+    assert (
+        sym.demangle_name()
+        == "cxx_function(std::vector<int, std::allocator<int> >)"
+    )
 
 
 def test_tokenize_symbol():
