@@ -1,9 +1,6 @@
 import os
 from contextlib import contextmanager
-from pathlib import Path
 from shutil import rmtree
-
-import pytest
 
 # isort: off
 from bdx.index import (
@@ -14,8 +11,6 @@ from bdx.index import (
 )
 
 # isort: on
-
-FIXTURE_PATH = Path(__file__).parent / "fixture"
 
 
 @contextmanager
@@ -28,21 +23,13 @@ def chdir(dir):
         os.chdir(old)
 
 
-@pytest.fixture(scope="module")
-def readonly_index(tmp_path_factory):
-    index_path = tmp_path_factory.mktemp("index")
-    index_binary_directory(FIXTURE_PATH, index_path, IndexingOptions())
-    with SymbolIndex.open(index_path, readonly=True) as index:
-        yield index
-
-
-def test_indexing(tmp_path):
+def test_indexing(fixture_path, tmp_path):
     index_path = tmp_path / "index"
-    index_binary_directory(FIXTURE_PATH, index_path, IndexingOptions())
+    index_binary_directory(fixture_path, index_path, IndexingOptions())
 
     with SymbolIndex.open(index_path, readonly=True) as index:
         symbols = index.search("*:*")
-        assert symbols.count == 13
+        assert symbols.count == 15
         by_name = {x.name: x for x in symbols}
 
         top_level_symbol = by_name["top_level_symbol"]
@@ -54,7 +41,7 @@ def test_indexing(tmp_path):
         camel_case_symbol = by_name["CamelCaseSymbol"]
         cpp_camel_case_symbol = by_name["_Z18CppCamelCaseSymbolPKc"]
 
-        assert top_level_symbol.path == FIXTURE_PATH / "toplev.c.o"
+        assert top_level_symbol.path == fixture_path / "toplev.c.o"
         assert top_level_symbol.name == "top_level_symbol"
         assert top_level_symbol.section == ".rodata"
         assert top_level_symbol.address == 0
@@ -62,7 +49,7 @@ def test_indexing(tmp_path):
         assert top_level_symbol.relocations == []
         assert top_level_symbol.mtime > 0
 
-        assert other_top_level_symbol.path == FIXTURE_PATH / "toplev.c.o"
+        assert other_top_level_symbol.path == fixture_path / "toplev.c.o"
         assert other_top_level_symbol.name == "other_top_level_symbol"
         assert other_top_level_symbol.section == ".data.rel.ro.local"
         assert other_top_level_symbol.address == 0
@@ -70,12 +57,12 @@ def test_indexing(tmp_path):
         assert other_top_level_symbol.relocations == ["top_level_symbol"]
         assert other_top_level_symbol.mtime > 0
 
-        assert bar.path == FIXTURE_PATH / "subdir" / "bar.cpp.o"
+        assert bar.path == fixture_path / "subdir" / "bar.cpp.o"
         assert bar.name == "bar"
         assert bar.section == ".bss"
         assert bar.relocations == []
 
-        assert cxx_function.path == FIXTURE_PATH / "subdir" / "bar.cpp.o"
+        assert cxx_function.path == fixture_path / "subdir" / "bar.cpp.o"
         assert cxx_function.name == "_Z12cxx_functionSt6vectorIiSaIiEE"
         assert cxx_function.section == ".text"
         assert cxx_function.relocations == [
@@ -83,12 +70,12 @@ def test_indexing(tmp_path):
             "foo",
         ]
 
-        assert foo.path == FIXTURE_PATH / "subdir" / "foo.c.o"
+        assert foo.path == fixture_path / "subdir" / "foo.c.o"
         assert foo.name == "foo"
         assert foo.section == ".bss"
         assert foo.relocations == []
 
-        assert c_function.path == FIXTURE_PATH / "subdir" / "foo.c.o"
+        assert c_function.path == fixture_path / "subdir" / "foo.c.o"
         assert c_function.name == "c_function"
         assert c_function.section == ".text"
         assert c_function.relocations == [
@@ -97,25 +84,25 @@ def test_indexing(tmp_path):
 
         for i in range(5):
             symbol = by_name[f"a_name{i}"]
-            assert symbol.path == FIXTURE_PATH / "subdir" / "foo.c.o"
+            assert symbol.path == fixture_path / "subdir" / "foo.c.o"
             assert symbol.name == f"a_name{i}"
             assert symbol.section == ".bss"
             assert symbol.relocations == []
 
-        assert camel_case_symbol.path == FIXTURE_PATH / "subdir" / "foo.c.o"
+        assert camel_case_symbol.path == fixture_path / "subdir" / "foo.c.o"
         assert camel_case_symbol.name == "CamelCaseSymbol"
         assert camel_case_symbol.section == ".text"
         assert camel_case_symbol.relocations == []
 
         assert (
-            cpp_camel_case_symbol.path == FIXTURE_PATH / "subdir" / "bar.cpp.o"
+            cpp_camel_case_symbol.path == fixture_path / "subdir" / "bar.cpp.o"
         )
         assert cpp_camel_case_symbol.name == "_Z18CppCamelCaseSymbolPKc"
         assert cpp_camel_case_symbol.section == ".text"
         assert cpp_camel_case_symbol.relocations == []
 
 
-def test_indexing_min_symbol_size(tmp_path):
+def test_indexing_min_symbol_size(fixture_path, tmp_path):
     index_path = tmp_path / "index"
     for msize in [0, 1, 64, 65]:
         try:
@@ -124,7 +111,7 @@ def test_indexing_min_symbol_size(tmp_path):
             pass
 
         index_binary_directory(
-            FIXTURE_PATH, index_path, IndexingOptions(min_symbol_size=msize)
+            fixture_path, index_path, IndexingOptions(min_symbol_size=msize)
         )
 
         with SymbolIndex.open(index_path, readonly=True) as index:
@@ -144,10 +131,10 @@ def test_indexing_min_symbol_size(tmp_path):
                 assert "top_level_symbol" not in by_name
 
 
-def test_indexing_without_relocations(tmp_path):
+def test_indexing_without_relocations(fixture_path, tmp_path):
     index_path = tmp_path / "index"
     index_binary_directory(
-        FIXTURE_PATH, index_path, IndexingOptions(index_relocations=False)
+        fixture_path, index_path, IndexingOptions(index_relocations=False)
     )
 
     with SymbolIndex.open(index_path, readonly=True) as index:
@@ -218,49 +205,49 @@ def test_searching_by_size(readonly_index):
     assert "top_level_symbol" in names
 
 
-def test_searching_by_relative_path(readonly_index):
-    with chdir(FIXTURE_PATH):
+def test_searching_by_relative_path(fixture_path, readonly_index):
+    with chdir(fixture_path):
         all_symbols = set(readonly_index.search("*:*"))
 
         # Ensure the path is normalized
         subdir_symbols = set(readonly_index.search("path:subdir///*"))
         assert subdir_symbols
         for sym in subdir_symbols:
-            assert FIXTURE_PATH / "subdir" in sym.path.parents
+            assert fixture_path / "subdir" in sym.path.parents
         for sym in all_symbols.difference(subdir_symbols):
-            assert FIXTURE_PATH / "subdir" not in sym.path.parents
+            assert fixture_path / "subdir" not in sym.path.parents
 
-    with chdir(FIXTURE_PATH / "subdir"):
+    with chdir(fixture_path / "subdir"):
         subdir_symbols = set(readonly_index.search("path:./*"))
         assert subdir_symbols
         for sym in subdir_symbols:
-            assert FIXTURE_PATH / "subdir" in sym.path.parents
+            assert fixture_path / "subdir" in sym.path.parents
         for sym in all_symbols.difference(subdir_symbols):
-            assert FIXTURE_PATH / "subdir" not in sym.path.parents
+            assert fixture_path / "subdir" not in sym.path.parents
 
 
-def test_searching_by_absolute_path(readonly_index):
-    with chdir(FIXTURE_PATH):
+def test_searching_by_absolute_path(fixture_path, readonly_index):
+    with chdir(fixture_path):
         all_symbols = set(readonly_index.search("*:*"))
         # Ensure the path is normalized
         foo_symbols = set(
-            readonly_index.search(f"path:///{FIXTURE_PATH}///subdir//foo.c.o")
+            readonly_index.search(f"path:///{fixture_path}///subdir//foo.c.o")
         )
         assert foo_symbols
         for sym in foo_symbols:
-            assert sym.path == FIXTURE_PATH / "subdir" / "foo.c.o"
+            assert sym.path == fixture_path / "subdir" / "foo.c.o"
         for sym in all_symbols.difference(foo_symbols):
-            assert sym.path != FIXTURE_PATH / "subdir" / "foo.c.o"
+            assert sym.path != fixture_path / "subdir" / "foo.c.o"
 
 
-def test_searching_by_basename(readonly_index):
+def test_searching_by_basename(fixture_path, readonly_index):
     all_symbols = set(readonly_index.search("*:*"))
     bar_symbols = set(readonly_index.search("path:bar.cpp.o"))
     assert bar_symbols
     for sym in bar_symbols:
-        assert sym.path == FIXTURE_PATH / "subdir" / "bar.cpp.o"
+        assert sym.path == fixture_path / "subdir" / "bar.cpp.o"
     for sym in all_symbols.difference(bar_symbols):
-        assert sym.path != FIXTURE_PATH / "subdir" / "bar.cpp.o"
+        assert sym.path != fixture_path / "subdir" / "bar.cpp.o"
 
 
 def test_searching_cxx(readonly_index):
