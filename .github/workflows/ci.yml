@@ -59,8 +59,13 @@ jobs:
           sudo sed -i 's/^Types: deb/Types: deb deb-src/' /etc/apt/sources.list.d/*
 
           sudo apt-get update
+
+          # Xapian deps
           sudo apt-get install build-essential zlib1g-dev uuid-dev
           sudo apt-get build-dep libxapian-dev
+
+          # Pygraphviz
+          sudo apt-get install graphviz-dev
 
           # Install prerequisites for xapian-bindings.
           # https://github.com/sphinx-doc/sphinx/issues/6524
@@ -95,7 +100,7 @@ jobs:
           sudo make install
 
       - name: Install the project
-        run: pip install -e .[dev]
+        run: pip install -e .[dev,graphs]
 
       - name: Lint
         run: make lint
