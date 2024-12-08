@@ -145,11 +145,18 @@ class DFS(Searcher):
 class ASTAR(Searcher, astar.AStar):
     """Wrapper for the A* algorithm."""
 
+    class Interrupt(BaseException):
+        """Used to stop the search gracefully."""
+
     def search(
         self, start: Symbol, goal: set[Symbol]
     ) -> Optional[list[Symbol]]:
         """Return a path from ``start`` to ``goal``, if it exists."""
-        res = self.astar(start, goal)
+        try:
+            res = self.astar(start, goal)
+        except ASTAR.Interrupt:
+            return None
+
         if res:
             return list(res)
 
@@ -157,21 +164,29 @@ class ASTAR(Searcher, astar.AStar):
 
     def neighbors(self, node: Symbol) -> set[Symbol]:
         """Get all the neighbors of given node."""
+        if self.should_quit():
+            raise ASTAR.Interrupt
         self.on_symbol_visited()
         return _get_neighbors(self.index, node)
 
     def distance_between(self, n1, n2) -> float:
         """Get the distance between two nodes."""
+        if self.should_quit():
+            raise ASTAR.Interrupt
         return 1
 
     def is_goal_reached(self, current: Symbol, goal: Iterable[Symbol]) -> bool:
         """Return true if the given node is the end node."""
+        if self.should_quit():
+            raise ASTAR.Interrupt
         return current in goal
 
     def heuristic_cost_estimate(
         self, current: Symbol, goal: Iterable[Symbol]
     ) -> float:
         """Calculate the A* heuristic for given node and goal."""
+        if self.should_quit():
+            raise ASTAR.Interrupt
         # TODO: Use actual heuristic
         return 1
 
