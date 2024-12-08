@@ -123,6 +123,11 @@ def test_cli_file_list(fixture_path, index_path):
 
 
 def test_cli_graph(fixture_path, index_path):
+    try:
+        import bdx.graph
+    except ImportError:
+        pytest.skip(reason="Graphs not available, package not installed")
+
     runner = CliRunner()
     result = index_directory(runner, fixture_path, index_path)
     assert result.exit_code == 0
