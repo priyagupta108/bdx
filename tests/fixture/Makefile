@@ -11,6 +11,9 @@ OBJFILES := $(patsubst %,%.o,${FILES})
 %.cpp.o: %.cpp
 	${CXX} ${CFLAGS} -c -o $@ $^
 
+compile_commands.json: ${FILES}
+	bear -- ${MAKE} clean default
+
 default: ${OBJFILES}
 
 clean:

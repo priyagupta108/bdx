@@ -1,5 +1,7 @@
 import os
+from contextlib import contextmanager
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 
@@ -16,9 +18,23 @@ from bdx.index import (
 FIXTURE_PATH = Path(__file__).parent / "fixture"
 
 
+@pytest.fixture
+def chdir():
+    @contextmanager
+    def changer(dir):
+        old = os.getcwd()
+        try:
+            os.chdir(dir)
+            yield
+        finally:
+            os.chdir(old)
+
+    yield changer
+
+
 @pytest.fixture(scope="session")
 def readonly_index(tmp_path_factory):
-    index_path = tmp_path_factory.mktemp("index")
+    index_path = tmp_path_factory.mktemp(f"index{uuid4()}")
     index_binary_directory(FIXTURE_PATH, index_path, IndexingOptions())
     with SymbolIndex.open(index_path, readonly=True) as index:
         yield index

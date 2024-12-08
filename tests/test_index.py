@@ -1,5 +1,3 @@
-import os
-from contextlib import contextmanager
 from shutil import rmtree
 
 # isort: off
@@ -11,16 +9,6 @@ from bdx.index import (
 )
 
 # isort: on
-
-
-@contextmanager
-def chdir(dir):
-    old = os.getcwd()
-    try:
-        os.chdir(dir)
-        yield
-    finally:
-        os.chdir(old)
 
 
 def test_indexing(fixture_path, tmp_path):
@@ -205,7 +193,7 @@ def test_searching_by_size(readonly_index):
     assert "top_level_symbol" in names
 
 
-def test_searching_by_relative_path(fixture_path, readonly_index):
+def test_searching_by_relative_path(fixture_path, readonly_index, chdir):
     with chdir(fixture_path):
         all_symbols = set(readonly_index.search("*:*"))
 
@@ -226,7 +214,7 @@ def test_searching_by_relative_path(fixture_path, readonly_index):
             assert fixture_path / "subdir" not in sym.path.parents
 
 
-def test_searching_by_absolute_path(fixture_path, readonly_index):
+def test_searching_by_absolute_path(fixture_path, readonly_index, chdir):
     with chdir(fixture_path):
         all_symbols = set(readonly_index.search("*:*"))
         # Ensure the path is normalized

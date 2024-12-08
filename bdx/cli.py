@@ -5,7 +5,7 @@ import os
 from dataclasses import asdict
 from functools import lru_cache, wraps
 from pathlib import Path
-from sys import exit, stdout
+from sys import exit
 from typing import Optional
 
 import click
@@ -305,11 +305,10 @@ def search(_directory, index_path, query, num, format):
 
         if fmt == "json":
             del data["basename"]
-            json.dump(data, stdout)
-            print()
+            click.echo(json.dumps(data))
         else:
             try:
-                print(fmt.format(**data))
+                click.echo(fmt.format(**data))
             except (KeyError, ValueError, TypeError):
                 error(
                     f"Invalid format: '{fmt}'\n"
