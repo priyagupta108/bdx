@@ -49,3 +49,4 @@ def fixture_path():
 def run_around_tests():
     # Simplify debugging by indexing in this process only for tests
     os.environ["_BDX_NO_MULTIPROCESSING"] = "1"
+    os.environ["BDX_DISABLE_PROGRESS_BAR"] = "1"

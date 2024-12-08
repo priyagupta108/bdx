@@ -3,6 +3,7 @@ import sys
 from pathlib import Path
 
 import click
+import tqdm
 
 VERBOSITY = 0
 
@@ -53,3 +54,9 @@ def error(msg, *args):
     """Log ``msg`` and then quit the program."""
     log("error: " + msg, *args)
     sys.exit(1)
+
+
+def make_progress_bar(*args, **kwargs):
+    """Return ``tqdm`` progress bar if available."""
+    disable = os.getenv("BDX_DISABLE_PROGRESS_BAR") is not None
+    return tqdm.tqdm(*args, disable=disable, **kwargs)

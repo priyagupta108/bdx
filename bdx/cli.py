@@ -11,10 +11,9 @@ from typing import Optional
 import click
 from click.shell_completion import CompletionItem
 from click.types import BoolParamType, IntRange
-from tqdm import tqdm
 
 import bdx
-from bdx import debug, error, info, log
+from bdx import debug, error, info, log, make_progress_bar
 from bdx.binary import BinaryDirectory, Symbol, find_compilation_database
 # fmt: off
 from bdx.index import (IndexingOptions, SymbolIndex, index_binary_directory,
@@ -415,9 +414,13 @@ if have_graphs:
         throughout a codebase.
 
         """
-        progress_bar = tqdm(unit="nodes")
-        visit_progress_bar = tqdm(desc="Nodes visited", unit="symbols")
-        found_routes_progress_bar = tqdm(desc="Found", unit="routes")
+        progress_bar = make_progress_bar(unit="nodes")
+        visit_progress_bar = make_progress_bar(
+            desc="Nodes visited", unit="symbols"
+        )
+        found_routes_progress_bar = make_progress_bar(
+            desc="Found", unit="routes"
+        )
 
         def on_progress(num_done, num_total):
             progress_bar.total = num_total

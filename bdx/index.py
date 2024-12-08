@@ -14,9 +14,8 @@ from pathlib import Path
 from typing import Any, Callable, ClassVar, Dict, Iterator, List, Optional
 
 import xapian
-from tqdm import tqdm
 
-from bdx import debug, detail_log, log, trace
+from bdx import debug, detail_log, log, make_progress_bar, trace
 from bdx.binary import BinaryDirectory, Symbol, read_symtable
 
 MAX_TERM_SIZE = 244
@@ -817,7 +816,7 @@ def index_binary_directory(
             _index_single_file, changed_files
         )
 
-        iterator = tqdm(
+        iterator = make_progress_bar(
             perfile_iterator, unit="file", total=len(changed_files)
         )
 
