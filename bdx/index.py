@@ -793,13 +793,21 @@ def index_binary_directory(
             index.delete_file(file)
             debug("File deleted: {}", file)
 
+    pool_class: Callable = mp.Pool
     num_processes = options.num_processes
+
+    if os.getenv("_BDX_NO_MULTIPROCESSING"):
+        from multiprocessing.pool import ThreadPool
+
+        pool_class = ThreadPool
+        num_processes = 1
+
     stop_event = mp.Event()
     barrier = mp.Barrier(num_processes + 1)
 
     with (
         sigint_catcher() as interrupted,
-        mp.Pool(
+        pool_class(
             processes=num_processes,
             initializer=_init_pool_worker,
             initargs=[index_path, stop_event, barrier, options],

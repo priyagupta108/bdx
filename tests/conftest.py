@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 import pytest
@@ -26,3 +27,9 @@ def readonly_index(tmp_path_factory):
 @pytest.fixture(scope="session")
 def fixture_path():
     return FIXTURE_PATH
+
+
+@pytest.fixture(autouse=True)
+def run_around_tests():
+    # Simplify debugging by indexing in this process only for tests
+    os.environ["_BDX_NO_MULTIPROCESSING"] = "1"
