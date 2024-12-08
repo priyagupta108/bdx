@@ -28,6 +28,8 @@ def test_indexing(fixture_path, tmp_path):
         c_function = by_name["c_function"]
         camel_case_symbol = by_name["CamelCaseSymbol"]
         cpp_camel_case_symbol = by_name["_Z18CppCamelCaseSymbolPKc"]
+        main = by_name["main"]
+        uses_c_function = by_name["uses_c_function"]
 
         assert top_level_symbol.path == fixture_path / "toplev.c.o"
         assert top_level_symbol.name == "top_level_symbol"
@@ -88,6 +90,16 @@ def test_indexing(fixture_path, tmp_path):
         assert cpp_camel_case_symbol.name == "_Z18CppCamelCaseSymbolPKc"
         assert cpp_camel_case_symbol.section == ".text"
         assert cpp_camel_case_symbol.relocations == []
+
+        assert main.path == fixture_path / "toplev.c.o"
+        assert main.name == "main"
+        assert main.section == ".text"
+        assert main.relocations == ["uses_c_function"]
+
+        assert uses_c_function.path == fixture_path / "subdir" / "bar.cpp.o"
+        assert uses_c_function.name == "uses_c_function"
+        assert uses_c_function.section == ".text"
+        assert uses_c_function.relocations == ["c_function"]
 
 
 def test_indexing_min_symbol_size(fixture_path, tmp_path):
