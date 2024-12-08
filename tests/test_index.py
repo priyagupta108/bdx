@@ -45,7 +45,7 @@ def test_indexing(index_path):
 
     with SymbolIndex.open(index_path, readonly=True) as index:
         symbols = index.search("*:*")
-        assert symbols.count == 11
+        assert symbols.count == 13
         by_name = {x.name: x for x in symbols}
 
         top_level_symbol = by_name["top_level_symbol"]
@@ -54,6 +54,8 @@ def test_indexing(index_path):
         cxx_function = by_name["_Z12cxx_functionSt6vectorIiSaIiEE"]
         foo = by_name["foo"]
         c_function = by_name["c_function"]
+        camel_case_symbol = by_name["CamelCaseSymbol"]
+        cpp_camel_case_symbol = by_name["_Z18CppCamelCaseSymbolPKc"]
 
         assert top_level_symbol.path == FIXTURE_PATH / "toplev.c.o"
         assert top_level_symbol.name == "top_level_symbol"
@@ -102,6 +104,18 @@ def test_indexing(index_path):
             assert symbol.name == f"a_name{i}"
             assert symbol.section == ".bss"
             assert symbol.relocations == []
+
+        assert camel_case_symbol.path == FIXTURE_PATH / "subdir" / "foo.c.o"
+        assert camel_case_symbol.name == "CamelCaseSymbol"
+        assert camel_case_symbol.section == ".text"
+        assert camel_case_symbol.relocations == []
+
+        assert (
+            cpp_camel_case_symbol.path == FIXTURE_PATH / "subdir" / "bar.cpp.o"
+        )
+        assert cpp_camel_case_symbol.name == "_Z18CppCamelCaseSymbolPKc"
+        assert cpp_camel_case_symbol.section == ".text"
+        assert cpp_camel_case_symbol.relocations == []
 
 
 def test_indexing_min_symbol_size(index_path):
@@ -159,6 +173,35 @@ def test_searching_by_wildcard(readonly_index):
 
     # Automatically append a wildcard if a field is not specified
     assert set(readonly_index.search("a_")) == symbols
+
+
+def test_searching_camel_case(readonly_index):
+    symbols = set(readonly_index.search("camel"))
+    assert symbols
+    by_name = {x.name: x for x in symbols}
+
+    assert "CamelCaseSymbol" in by_name
+    ccs = by_name["CamelCaseSymbol"]
+    assert ccs in readonly_index.search("case")
+    assert ccs in readonly_index.search("cam ca sym")
+    assert ccs in readonly_index.search("cam ca")
+    assert ccs in readonly_index.search("cas sym")
+    assert ccs in readonly_index.search("symbol")
+    assert ccs in readonly_index.search("camelc*")
+    assert ccs in readonly_index.search("Camel")
+    assert ccs in readonly_index.search("CamelC*")
+    assert ccs in readonly_index.search("CamelCase")
+    assert ccs in readonly_index.search("camelcaseS*")
+
+    assert "_Z18CppCamelCaseSymbolPKc" in by_name
+    ccs = by_name["_Z18CppCamelCaseSymbolPKc"]
+    assert ccs in readonly_index.search("case")
+    assert ccs in readonly_index.search("cam ca sym")
+    assert ccs in readonly_index.search("cam ca")
+    assert ccs in readonly_index.search("cas sym")
+    assert ccs in readonly_index.search("symbol")
+    assert ccs in readonly_index.search("cppcamelc*")
+    assert ccs in readonly_index.search("Camel")
 
 
 def test_searching_by_size(readonly_index):
