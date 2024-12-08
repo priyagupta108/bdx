@@ -179,12 +179,46 @@ def test_searching_by_size(readonly_index):
 def test_searching_by_relative_path(readonly_index):
     with chdir(FIXTURE_PATH):
         all_symbols = set(readonly_index.search("*:*"))
-        subdir_symbols = set(readonly_index.search("path:subdir/*"))
+
+        # Ensure the path is normalized
+        subdir_symbols = set(readonly_index.search("path:subdir///*"))
         assert subdir_symbols
         for sym in subdir_symbols:
             assert FIXTURE_PATH / "subdir" in sym.path.parents
         for sym in all_symbols.difference(subdir_symbols):
             assert FIXTURE_PATH / "subdir" not in sym.path.parents
+
+    with chdir(FIXTURE_PATH / "subdir"):
+        subdir_symbols = set(readonly_index.search("path:./*"))
+        assert subdir_symbols
+        for sym in subdir_symbols:
+            assert FIXTURE_PATH / "subdir" in sym.path.parents
+        for sym in all_symbols.difference(subdir_symbols):
+            assert FIXTURE_PATH / "subdir" not in sym.path.parents
+
+
+def test_searching_by_absolute_path(readonly_index):
+    with chdir(FIXTURE_PATH):
+        all_symbols = set(readonly_index.search("*:*"))
+        # Ensure the path is normalized
+        foo_symbols = set(
+            readonly_index.search(f"path:///{FIXTURE_PATH}///subdir//foo.c.o")
+        )
+        assert foo_symbols
+        for sym in foo_symbols:
+            assert sym.path == FIXTURE_PATH / "subdir" / "foo.c.o"
+        for sym in all_symbols.difference(foo_symbols):
+            assert sym.path != FIXTURE_PATH / "subdir" / "foo.c.o"
+
+
+def test_searching_by_basename(readonly_index):
+    all_symbols = set(readonly_index.search("*:*"))
+    bar_symbols = set(readonly_index.search("path:bar.cpp.o"))
+    assert bar_symbols
+    for sym in bar_symbols:
+        assert sym.path == FIXTURE_PATH / "subdir" / "bar.cpp.o"
+    for sym in all_symbols.difference(bar_symbols):
+        assert sym.path != FIXTURE_PATH / "subdir" / "bar.cpp.o"
 
 
 def test_searching_cxx(readonly_index):

@@ -162,6 +162,16 @@ class IntegerField(DatabaseField):
 class PathField(DatabaseField):
     """Represents a path field in the database."""
 
+    def preprocess_value(self, value: Any) -> bytes:
+        """Normalize the path in given value."""
+        try:
+            # Normalize the path
+            value = str(Path(value)).encode()
+        except ValueError:
+            # Accept anything the user provides
+            pass
+        return value
+
     def index(self, document: xapian.Document, value: Any):
         """Index ``value`` in the ``document``."""
         path = Path(value)
