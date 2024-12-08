@@ -28,19 +28,16 @@ def chdir(dir):
         os.chdir(old)
 
 
-@pytest.fixture
-def index_path(tmp_path):
-    return tmp_path / "index"
-
-
-@pytest.fixture
-def readonly_index(index_path):
+@pytest.fixture(scope="module")
+def readonly_index(tmp_path_factory):
+    index_path = tmp_path_factory.mktemp("index")
     index_binary_directory(FIXTURE_PATH, index_path, IndexingOptions())
     with SymbolIndex.open(index_path, readonly=True) as index:
         yield index
 
 
-def test_indexing(index_path):
+def test_indexing(tmp_path):
+    index_path = tmp_path / "index"
     index_binary_directory(FIXTURE_PATH, index_path, IndexingOptions())
 
     with SymbolIndex.open(index_path, readonly=True) as index:
@@ -118,7 +115,8 @@ def test_indexing(index_path):
         assert cpp_camel_case_symbol.relocations == []
 
 
-def test_indexing_min_symbol_size(index_path):
+def test_indexing_min_symbol_size(tmp_path):
+    index_path = tmp_path / "index"
     for msize in [0, 1, 64, 65]:
         try:
             rmtree(index_path)
@@ -146,7 +144,8 @@ def test_indexing_min_symbol_size(index_path):
                 assert "top_level_symbol" not in by_name
 
 
-def test_indexing_without_relocations(index_path):
+def test_indexing_without_relocations(tmp_path):
+    index_path = tmp_path / "index"
     index_binary_directory(
         FIXTURE_PATH, index_path, IndexingOptions(index_relocations=False)
     )
