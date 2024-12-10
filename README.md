@@ -102,7 +102,7 @@ tree-eh.o: _ZL22record_in_finally_tree8treempleP4gtry
 
 The `-n` argument sets the maximum number of symbols to search for.
 
-The `-f` argument can be used to set output format (`json` or Python string format spec):
+The `-f` argument can be used to set output format (`json`, `sexp` or Python string format spec):
 
 ```
 $ bdx search  -n 5 -f json tree

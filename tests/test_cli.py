@@ -1,4 +1,5 @@
 import json
+import re
 
 import pytest
 
@@ -102,6 +103,33 @@ def test_cli_search_json_output(fixture_path, index_path):
         "size": 12,
         "relocations": ["foo"],
     }
+
+
+def test_cli_search_sexp_output(fixture_path, index_path):
+    runner = CliRunner()
+    result = index_directory(runner, fixture_path, index_path)
+    assert result.exit_code == 0
+
+    searchresult = search_directory(
+        runner, index_path, "-f", "sexp", "c", "funct"
+    )
+    assert searchresult.exit_code == 0
+
+    results = searchresult.output.splitlines()
+    results = [
+        re.sub(f':path "{str(fixture_path)}', ':path "XXX', s) for s in results
+    ]
+    results = [re.sub(f":mtime [0-9]+", ":mtime XXX", s) for s in results]
+
+    assert (
+        '(:path "XXX/subdir/bar.cpp.o"'
+        ' :name "_Z12cxx_functionSt6vectorIiSaIiEE"'
+        ' :section ".text"'
+        " :address 0"
+        " :size 24"
+        ' :relocations ("bar" "foo")'
+        " :mtime XXX)"
+    ) in results
 
 
 def test_cli_file_list(fixture_path, index_path):

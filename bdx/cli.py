@@ -6,7 +6,7 @@ from dataclasses import asdict
 from functools import lru_cache, wraps
 from pathlib import Path
 from sys import exit
-from typing import Optional
+from typing import Any, Optional
 
 import click
 from click.shell_completion import CompletionItem
@@ -28,6 +28,26 @@ try:
     have_graphs = True
 except ImportError:
     have_graphs = False
+
+
+def sexp_format(data: Any) -> str:
+    """Format data as a Lisp S-expression.
+
+    Dicts are formatted as plists, with keys formatted in ``:key`` format.
+    """
+    if isinstance(data, list):
+        return "({})".format(" ".join([sexp_format(x) for x in data]))
+    elif isinstance(data, dict):
+
+        def fmt(item):
+            key, value = item
+            return f":{key} {sexp_format(value)}"
+
+        return "({})".format(" ".join([fmt(x) for x in data.items()]))
+    elif isinstance(data, (str, int, float)):
+        return json.dumps(data)
+    msg = f"Invalid value: {data}"
+    raise ValueError(msg)
 
 
 def guess_directory_from_index_path(
@@ -248,6 +268,25 @@ def index(directory, index_path, opt, use_compilation_database):
     log(f"Symbols indexed: {stats.num_symbols_indexed}")
 
 
+class SearchOutputFormatParamType(click.Choice):
+    """Click parameter type for search --format."""
+
+    OPTIONS = [
+        "json",
+        "sexp",
+        # Add the default Python format as an example
+        "{basename}: {name}",
+    ]
+
+    def __init__(self):
+        """Initialize this param type instance."""
+        super().__init__(list(self.OPTIONS))
+
+    def convert(self, value, param, ctx):
+        """Convert the given value to correct type, or error out."""
+        return value
+
+
 @cli.command()
 @_common_options(index_must_exist=True)
 @click.argument(
@@ -265,7 +304,8 @@ def index(directory, index_path, opt, use_compilation_database):
 @click.option(
     "-f",
     "--format",
-    help="Output format",
+    help="Output format (json, sexp, or Python string format)",
+    type=SearchOutputFormatParamType(),
     nargs=1,
     default=None,
 )
@@ -305,6 +345,9 @@ def search(_directory, index_path, query, num, format):
         if fmt == "json":
             del data["basename"]
             click.echo(json.dumps(data))
+        elif fmt == "sexp":
+            del data["basename"]
+            click.echo(sexp_format(data))
         else:
             try:
                 click.echo(fmt.format(**data))
