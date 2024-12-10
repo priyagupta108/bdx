@@ -432,7 +432,6 @@ if have_graphs:
         help="The algorithm to choose",
     )
     @click.option(
-        "-d",
         "--demangle-names/--no-demangle-names",
         default=True,
         help="Use c++filt to demangle C++ names and use them as node labels.",
