@@ -85,7 +85,13 @@ def test_cli_search_json_output(fixture_path, index_path):
     assert result.exit_code == 0
 
     searchresult = search_directory(
-        runner, index_path, "-f", "json", "c", "funct"
+        runner,
+        index_path,
+        "-f",
+        "json",
+        "--demangle-names",
+        "c",
+        "funct",
     )
     assert searchresult.exit_code == 0
 
@@ -98,10 +104,20 @@ def test_cli_search_json_output(fixture_path, index_path):
     assert results_by_name["c_function"] == {
         "path": str(fixture_path / "subdir" / "foo.c.o"),
         "name": "c_function",
+        "demangled": "c_function",
         "section": ".text",
         "address": 0,
         "size": 12,
         "relocations": ["foo"],
+    }
+    assert results_by_name["_Z12cxx_functionSt6vectorIiSaIiEE"] == {
+        "path": str(fixture_path / "subdir" / "bar.cpp.o"),
+        "name": "_Z12cxx_functionSt6vectorIiSaIiEE",
+        "demangled": "cxx_function(std::vector<int, std::allocator<int> >)",
+        "section": ".text",
+        "address": 0,
+        "size": 24,
+        "relocations": ["bar", "foo"],
     }
 
 
@@ -111,7 +127,7 @@ def test_cli_search_sexp_output(fixture_path, index_path):
     assert result.exit_code == 0
 
     searchresult = search_directory(
-        runner, index_path, "-f", "sexp", "c", "funct"
+        runner, index_path, "-f", "sexp", "--demangle-names", "c", "funct"
     )
     assert searchresult.exit_code == 0
 
@@ -128,7 +144,9 @@ def test_cli_search_sexp_output(fixture_path, index_path):
         " :address 0"
         " :size 24"
         ' :relocations ("bar" "foo")'
-        " :mtime XXX)"
+        " :mtime XXX"
+        ' :demangled "cxx_function(std::vector<int, std::allocator<int> >)"'
+        ")"
     ) in results
 
 

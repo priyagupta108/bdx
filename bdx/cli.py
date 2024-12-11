@@ -16,8 +16,9 @@ from click.types import BoolParamType, IntRange
 
 import bdx
 from bdx import debug, error, info, log, make_progress_bar
-from bdx.binary import BinaryDirectory, Symbol, find_compilation_database
 # fmt: off
+from bdx.binary import (BinaryDirectory, NameDemangler, Symbol,
+                        find_compilation_database)
 from bdx.index import (IndexingOptions, SymbolIndex, index_binary_directory,
                        search_index)
 from bdx.query_parser import QueryParser
@@ -311,9 +312,18 @@ class SearchOutputFormatParamType(click.Choice):
     nargs=1,
     default=None,
 )
-def search(_directory, index_path, query, num, format):
+@click.option(
+    "--demangle-names/--no-demangle-names",
+    default=False,
+    help="Make demangled C++ name available as {demangled} format field",
+)
+def search(_directory, index_path, query, num, format, demangle_names):
     """Search binary directory for symbols."""
     outdated_paths = set()
+
+    queue: list[Symbol] = list()
+
+    name_demangler = NameDemangler()
 
     @lru_cache
     def is_outdated(symbol: Symbol):
@@ -323,7 +333,7 @@ def search(_directory, index_path, query, num, format):
             os_mtime = 0
         return os_mtime != symbol.mtime
 
-    def callback(symbol: Symbol):
+    def print_symbol(symbol: Symbol):
         def valueconv(v):
             try:
                 json.dumps(v)
@@ -338,6 +348,8 @@ def search(_directory, index_path, query, num, format):
                 **asdict(symbol),
             }.items()
         }
+        if demangle_names:
+            data["demangled"] = name_demangler.get_demangled_name(symbol.name)
 
         if format is None:
             fmt = "{basename}: {name}"
@@ -363,13 +375,27 @@ def search(_directory, index_path, query, num, format):
             if is_outdated(symbol):
                 outdated_paths.add(symbol.path)
 
+    def flush_queue():
+        while queue:
+            item = queue.pop(0)
+            print_symbol(item)
+
+    def callback(symbol: Symbol):
+        if demangle_names:
+            name_demangler.demangle_async(symbol.name)
+        queue.append(symbol)
+        if len(queue) >= 128:
+            flush_queue()
+
     try:
-        search_index(
-            index_path=index_path,
-            query=" ".join(query),
-            limit=num,
-            consumer=callback,
-        )
+        with name_demangler:
+            search_index(
+                index_path=index_path,
+                query=" ".join(query),
+                limit=num,
+                consumer=callback,
+            )
+            flush_queue()
     except QueryParser.Error as e:
         error(f"Invalid query: {str(e)}")
         exit(1)

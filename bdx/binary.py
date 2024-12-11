@@ -3,13 +3,14 @@ from __future__ import annotations
 import json
 import os
 import re
+import subprocess
 from collections import defaultdict
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from functools import cached_property, total_ordering
 from pathlib import Path
-from subprocess import check_output
-from typing import Iterator, Optional
+from subprocess import Popen, check_output
+from typing import IO, Iterator, Optional
 
 from elftools.elf.elffile import ELFFile
 from elftools.elf.relocation import Relocation, RelocationSection
@@ -17,6 +18,57 @@ from elftools.elf.sections import SymbolTableSection
 from sortedcontainers import SortedList
 
 from bdx import info, trace
+
+
+class NameDemangler:
+    """A class for batch async demangling of names with c++filt program."""
+
+    def __init__(self):
+        """Create a new demangler, with no process.
+
+        The process is started in ``demangle_async``.
+        """
+        self._process: Optional[Popen] = None
+        self._dict = {}
+
+    def __enter__(self) -> "NameDemangler":
+        return self
+
+    def __exit__(self, *_args, **_kwargs):
+        self._close()
+
+    def demangle_async(self, name: str) -> None:
+        """Send ``name`` for demangling.
+
+        The result can be retrieved with ``get_demangled_name``.
+        """
+        if not self._process:
+            self._process = Popen(
+                ["c++filt"], stdin=subprocess.PIPE, stdout=subprocess.PIPE
+            )
+
+        stdin: IO = self._process.stdin  # type: ignore
+
+        stdin.write(json.dumps({f"MANGLED_{name}": name}).encode())
+        stdin.write(b"\n")
+
+    def get_demangled_name(self, mangled_name: str) -> Optional[str]:
+        """Get a demangled name that was mangled in ``demangle_async``."""
+        if self._process:
+            stdout, _stderr = self._process.communicate()
+            for line in stdout.splitlines():
+                d = json.loads(line)
+                self._dict.update(d)
+            self._close()
+
+        return self._dict.get(f"MANGLED_{mangled_name}")
+
+    def _close(self):
+        if self._process:
+            self._process.terminate()
+            self._process.wait(0.5)
+            self._process.kill()
+        self._process = None
 
 
 @total_ordering

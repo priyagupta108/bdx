@@ -1,9 +1,10 @@
 import os
 from datetime import datetime, timedelta
 from pathlib import Path
+from random import shuffle
 from typing import Optional
 
-from bdx.binary import BinaryDirectory
+from bdx.binary import BinaryDirectory, NameDemangler
 
 
 def create_fake_elf_file(path: Path, mtime: Optional[datetime] = None):
@@ -36,6 +37,59 @@ def setup_tmp_dir(
     for f in files_to_modify:
         f.touch()
     return file_list, files_to_delete, files_to_modify, max_mtime
+
+
+def shuffled_int_range(stop):
+    l = list(range(stop))
+    shuffle(l)
+    return l
+
+
+def test_name_demangler():
+    with NameDemangler() as nd:
+        nd.demangle_async("memset")
+        nd.demangle_async("_Z12cxx_functionSt6vectorIiSaIiEE")
+        nd.demangle_async(".text._Z12cxx_functionSt6vectorIiSaIiEE")
+
+        assert (
+            nd.get_demangled_name("_Z12cxx_functionSt6vectorIiSaIiEE")
+            == "cxx_function(std::vector<int, std::allocator<int> >)"
+        )
+
+        assert (
+            nd.get_demangled_name(".text._Z12cxx_functionSt6vectorIiSaIiEE")
+            == ".text._Z12cxx_functionSt6vectorIiSaIiEE"
+        )
+
+        assert nd.get_demangled_name("memset") == "memset"
+
+        assert nd.get_demangled_name("Unknown") == None
+
+
+def test_name_demangler_many_at_once():
+    with NameDemangler() as nd:
+        fmt = "_Z12cxx_func_{i:0>3}v"
+        demangled_fmt = "cxx_func_{i:0>3}()"
+        results = {}
+
+        for j, i in enumerate(shuffled_int_range(500)):
+            mangled = fmt.format(i=i)
+            nd.demangle_async(mangled)
+
+            # Trigger generating new process every N elements
+            if j % 32 == 0:
+                assert nd.get_demangled_name(mangled) is not None
+
+        for i in shuffled_int_range(500):
+            mangled = fmt.format(i=i)
+            demangled = nd.get_demangled_name(mangled)
+
+            results[i] = demangled
+
+        for i in range(500):
+            demangled = demangled_fmt.format(i=i)
+
+            assert results[i] == demangled
 
 
 def test_find_files(tmp_path):
