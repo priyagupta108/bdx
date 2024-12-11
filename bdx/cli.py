@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import os
+import sys
+import time
 from dataclasses import asdict
 from functools import lru_cache, wraps
 from pathlib import Path
@@ -436,6 +438,14 @@ if have_graphs:
         default=True,
         help="Use c++filt to demangle C++ names and use them as node labels.",
     )
+    @click.option(
+        "--json-progress",
+        is_flag=True,
+        help=(
+            "Print progress to stderr using json"
+            " instead of using a progress bar."
+        ),
+    )
     def graph(
         _directory,
         index_path,
@@ -444,6 +454,7 @@ if have_graphs:
         num_routes,
         algorithm,
         demangle_names,
+        json_progress,
     ):
         """Generate a reference graph in DOT format from two queries.
 
@@ -456,17 +467,62 @@ if have_graphs:
         throughout a codebase.
 
         """
-        progress_bar = make_progress_bar(unit="nodes")
-        visit_progress_bar = make_progress_bar(
-            desc="Nodes visited", unit="symbols"
-        )
-        found_routes_progress_bar = make_progress_bar(
-            desc="Found", unit="routes"
-        )
+        if json_progress:
 
-        def on_progress(num_done, num_total):
-            progress_bar.total = num_total
-            progress_bar.update()
+            num_symbols_visited = 0
+            num_routes_found = 0
+            last_symbol_print_time = 0.0
+
+            def print_symbols_visited():
+                nonlocal last_symbol_print_time
+
+                json.dump(
+                    {"visited": num_symbols_visited},
+                    sys.stderr,
+                )
+                log("")
+                last_symbol_print_time = time.time()
+
+            def on_symbol_visited():
+                nonlocal num_symbols_visited
+
+                num_symbols_visited += 1
+                if time.time() - last_symbol_print_time >= 1:
+                    print_symbols_visited()
+
+            def on_route_found():
+                nonlocal num_routes_found
+                num_routes_found += 1
+                json.dump(
+                    {"found": num_routes_found},
+                    sys.stderr,
+                )
+                log("")
+
+            def on_progress(num_done, num_total):
+                json.dump(
+                    {"done": num_done, "total": num_total},
+                    sys.stderr,
+                )
+                log("")
+                if num_done == num_total:
+                    print_symbols_visited()
+
+        else:
+            progress_bar = make_progress_bar(unit="nodes")
+            visit_progress_bar = make_progress_bar(
+                desc="Nodes visited", unit="symbols"
+            )
+            found_routes_progress_bar = make_progress_bar(
+                desc="Found", unit="routes"
+            )
+
+            on_symbol_visited = visit_progress_bar.update
+            on_route_found = found_routes_progress_bar.update
+
+            def on_progress(num_done, num_total):
+                progress_bar.total = num_total
+                progress_bar.update()
 
         graph = generate_graph(
             index_path,
@@ -476,8 +532,8 @@ if have_graphs:
             algo=algorithm,
             demangle_names=demangle_names,
             on_progress=on_progress,
-            on_symbol_visited=visit_progress_bar.update,
-            on_route_found=found_routes_progress_bar.update,
+            on_symbol_visited=on_symbol_visited,
+            on_route_found=on_route_found,
         )
         print(graph)
 

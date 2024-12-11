@@ -218,9 +218,10 @@ def _generate_paths(
         raise ValueError(msg)
 
     for i, start in enumerate(start_set):
-        on_progress(i, len(start_set))
-
         path = searcher.search(start, goal_set)
+
+        on_progress(i + 1, len(start_set))
+
         if not path:
             continue
 

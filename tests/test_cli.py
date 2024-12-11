@@ -156,15 +156,28 @@ def test_cli_graph(fixture_path, index_path):
     except ImportError:
         pytest.skip(reason="Graphs not available, package not installed")
 
-    runner = CliRunner()
+    runner = CliRunner(mix_stderr=False)
     result = index_directory(runner, fixture_path, index_path)
     assert result.exit_code == 0
 
     graphresult = runner.invoke(
-        cli, ["graph", "--index-path", index_path, "main", "c_function"]
+        cli,
+        [
+            "graph",
+            "--index-path",
+            index_path,
+            "main",
+            "c_function",
+            "--json-progress",
+        ],
     )
 
     assert graphresult.exit_code == 0
+    stderr = graphresult.stderr.splitlines()
 
     assert "main -- uses_c_function" in graphresult.output
     assert "uses_c_function -- c_function" in graphresult.output
+
+    assert '{"done": 1, "total": 1}' in stderr
+    assert '{"found": 1}' in stderr
+    assert '{"visited": 2}' in stderr
