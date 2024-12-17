@@ -1,4 +1,8 @@
 int foo;
+int foo_;
+int foo__;
+
+int uses_foo() { return foo; }
 
 int c_function() { return foo; }
 

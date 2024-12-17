@@ -17,7 +17,7 @@ def test_indexing(fixture_path, tmp_path):
 
     with SymbolIndex.open(index_path, readonly=True) as index:
         symbols = index.search("*:*")
-        assert symbols.count == 15
+        assert symbols.count == 18
         by_name = {x.name: x for x in symbols}
 
         top_level_symbol = by_name["top_level_symbol"]
@@ -30,6 +30,9 @@ def test_indexing(fixture_path, tmp_path):
         cpp_camel_case_symbol = by_name["_Z18CppCamelCaseSymbolPKc"]
         main = by_name["main"]
         uses_c_function = by_name["uses_c_function"]
+        foo_ = by_name["foo_"]
+        foo__ = by_name["foo__"]
+        uses_foo = by_name["uses_foo"]
 
         assert top_level_symbol.path == fixture_path / "toplev.c.o"
         assert top_level_symbol.name == "top_level_symbol"
@@ -101,6 +104,18 @@ def test_indexing(fixture_path, tmp_path):
         assert uses_c_function.section == ".text"
         assert uses_c_function.relocations == ["c_function"]
 
+        assert foo_.path == fixture_path / "subdir" / "foo.c.o"
+        assert foo_.section == ".bss"
+        assert foo_.size == 4
+
+        assert foo__.path == fixture_path / "subdir" / "foo.c.o"
+        assert foo__.section == ".bss"
+        assert foo__.size == 4
+
+        assert uses_foo.path == fixture_path / "subdir" / "foo.c.o"
+        assert uses_foo.section == ".text"
+        assert uses_foo.size == 16
+
 
 def test_indexing_min_symbol_size(fixture_path, tmp_path):
     index_path = tmp_path / "index"
@@ -159,6 +174,27 @@ def test_searching_by_wildcard(readonly_index):
 
     # Automatically append a wildcard if a field is not specified
     assert set(readonly_index.search("a_")) == symbols
+
+
+def test_searching_by_exact_name(fixture_path, readonly_index):
+    all_symbols = list(readonly_index.search("name:foo"))
+
+    symbols = list(readonly_index.search("fullname:foo"))
+    assert len(symbols) == 1
+
+    symbol = symbols[0]
+
+    assert symbol.name == "foo"
+    assert symbol.path == fixture_path / "subdir" / "foo.c.o"
+
+    not_matching_exactly = list(
+        sorted(set(all_symbols).difference(set(symbols)), key=lambda s: s.name)
+    )
+    assert len(not_matching_exactly) == 3
+
+    assert not_matching_exactly[0].name == "foo_"
+    assert not_matching_exactly[1].name == "foo__"
+    assert not_matching_exactly[2].name == "uses_foo"
 
 
 def test_searching_camel_case(readonly_index):

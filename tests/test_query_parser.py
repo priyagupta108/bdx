@@ -21,7 +21,7 @@ LEAF_TERM = 100
 
 @fixture
 def query_parser():
-    schema = Schema([DatabaseField("name", "XNAME")])
+    schema = Schema([DatabaseField("name", "XNAME", key="name")])
     yield QueryParser(schema)
 
 
@@ -196,7 +196,7 @@ def test_intrange(query_parser):
     slot = 99928
     query_parser.schema = Schema(
         [
-            IntegerField("value", "XV", slot=slot),
+            IntegerField("value", "XV", slot=slot, key="value"),
         ]
     )
     query_parser.default_fields = ["value"]
@@ -220,8 +220,10 @@ def test_intrange(query_parser):
 
     query_parser.schema = Schema(
         [
-            IntegerField("value", "XV", slot=slot),
-            IntegerField("other_value", "XV2", slot=slot + 1),
+            IntegerField("value", "XV", slot=slot, key="value"),
+            IntegerField(
+                "other_value", "XV2", slot=slot + 1, key="other_value"
+            ),
         ]
     )
 
@@ -245,8 +247,8 @@ def test_intrange(query_parser):
 def test_path_field(query_parser):
     query_parser.schema = Schema(
         [
-            DatabaseField("name", "XNAME"),
-            PathField("path", "XPATH"),
+            DatabaseField("name", "XNAME", key="name"),
+            PathField("path", "XPATH", key="path"),
         ]
     )
 
@@ -280,7 +282,10 @@ def test_field_with_no_value(query_parser):
         query_parser.parse_query("name:")
 
     query_parser.schema = Schema(
-        [DatabaseField("name", "XNAME"), DatabaseField("path", "XPATH")]
+        [
+            DatabaseField("name", "XNAME", key="name"),
+            DatabaseField("path", "XPATH", key="path"),
+        ]
     )
     query_parser.ignore_missing_field_values = True
     assert (
@@ -306,9 +311,9 @@ def test_unknown_field(query_parser):
 def test_multiple_default_fields(query_parser):
     query_parser.schema = Schema(
         [
-            DatabaseField("name", "XNAME"),
-            DatabaseField("full_name", "XFULLNAME"),
-            DatabaseField("something", "XSOMETHING"),
+            DatabaseField("name", "XNAME", key="name"),
+            DatabaseField("full_name", "XFULLNAME", key="full_name"),
+            DatabaseField("something", "XSOMETHING", key="something"),
         ]
     )
     query_parser.default_fields = ["name", "full_name"]

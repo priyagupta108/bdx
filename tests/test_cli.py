@@ -106,8 +106,8 @@ def test_cli_search_json_output(fixture_path, index_path):
         "name": "c_function",
         "demangled": "c_function",
         "section": ".text",
-        "address": 0,
-        "size": 12,
+        "address": 16,
+        "size": 16,
         "relocations": ["foo"],
     }
     assert results_by_name["_Z12cxx_functionSt6vectorIiSaIiEE"] == {

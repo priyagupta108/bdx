@@ -6,6 +6,7 @@ import pickle
 import re
 import signal
 import threading
+from collections import defaultdict
 from collections.abc import Mapping
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
@@ -36,6 +37,11 @@ class DatabaseField:
 
     name: str
     prefix: str
+
+    # This DatabaseField will be responsible for indexing the
+    # following key/attribute of each document (Symbol) added to the
+    # index.
+    key: str
 
     def index(self, document: xapian.Document, value: Any):
         """Index ``value`` in the ``document``."""
@@ -258,16 +264,25 @@ class Schema(Mapping):
     _field_dict: Dict[str, DatabaseField] = field(
         default_factory=dict, init=False, repr=False
     )
+    _handlers: Dict[str, list[DatabaseField]] = field(
+        default_factory=lambda: defaultdict(list), init=False, repr=False
+    )
 
     def __post_init__(self):
-        """Make a map from the field list."""
-        self._field_dict.update({x.name: x for x in self.fields})
+        """Initialize internals."""
+        for db_field in self.fields:
+            if db_field.name in self._field_dict:
+                msg = f"'{db_field.name}' is duplicated in the schema"
+                raise ValueError(msg)
+            self._field_dict[db_field.name] = db_field
+            self._handlers[db_field.key].append(db_field)
 
     def __getitem__(self, key):
         if not self.fields:
             return DatabaseField(
                 name=key,
                 prefix=f"X{key.upper()}",
+                key=key,
             )
         return self._field_dict[key]
 
@@ -277,14 +292,15 @@ class Schema(Mapping):
     def __len__(self):
         return len(self.fields)
 
-    def index_document(self, document: xapian.Document, **fields: str):
-        """Index the ``fields`` in given ``document``."""
-        for fieldname, fieldval in fields.items():
-            if fieldname not in self:
+    def index_document(self, document: xapian.Document, **data: str):
+        """Index the ``data`` in given ``document``."""
+        for key, val in data.items():
+            if key not in self._handlers:
                 continue
 
-            field = self[fieldname]
-            field.index(document, fieldval)
+            handlers = self._handlers[key]
+            for handler in handlers:
+                handler.index(document, val)
 
 
 class SymbolIndex:
@@ -305,13 +321,14 @@ class SymbolIndex:
 
     SCHEMA = Schema(
         [
-            PathField("path", "XP"),
-            SymbolNameField("name", "XN"),
-            DatabaseField("section", "XSN"),
-            IntegerField("address", "XA", slot=0),
-            IntegerField("size", "XSZ", slot=1),
-            RelocationsField("relocations", "XR"),
-            IntegerField("mtime", "XM", slot=2),
+            PathField("path", "XP", key="path"),
+            SymbolNameField("name", "XN", key="name"),
+            DatabaseField("fullname", "XFN", key="name"),
+            DatabaseField("section", "XSN", key="section"),
+            IntegerField("address", "XA", slot=0, key="address"),
+            IntegerField("size", "XSZ", slot=1, key="size"),
+            RelocationsField("relocations", "XR", key="relocations"),
+            IntegerField("mtime", "XM", slot=2, key="mtime"),
         ]
     )
 

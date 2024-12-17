@@ -134,35 +134,39 @@ $ bdx search -n 5 -f '{size:0>10}|{section:<30}|{name}' tree
 
         bdx search foo OR bar
 
-3. Search for symbols `foo*` in files named `bar.o`:
+3. Search for symbols named _exactly_ `foo`:
+
+        bdx search fullname:foo
+
+4. Search for symbols `foo*` in files named `bar.o`:
 
         bdx search 'name:foo*' path:bar.o
 
-4. Search for symbols `foo` or `bar` that are not mangled (`_Z*` prefix):
+5. Search for symbols `foo` or `bar` that are not mangled (`_Z*` prefix):
 
         bdx search '(foo OR bar)' AND NOT name:_Z*
 
-5. Search for symbols that reference/call `memset`:
+6. Search for symbols that reference/call `memset`:
 
         bdx search relocations:memset
 
-6. Search for symbols that call `malloc`, but not `free`:
+7. Search for symbols that call `malloc`, but not `free`:
 
         bdx search relocations:malloc NOT relocations:free
 
-7. Search for symbols with size in some range:
+8. Search for symbols with size in some range:
 
         bdx search foo size:100..200
 
-8. Search for symbols by relative path:
+9. Search for symbols by relative path:
 
         bdx search 'path:./build/module/*'
 
-9. Search for string literals:
+10. Search for string literals:
 
         bdx search 'path:"/path/to/File With Spaces.o"'
 
-10. Search for big symbols in some section:
+11. Search for big symbols in some section:
 
         bdx search section:.rodata AND size:1000..
 
