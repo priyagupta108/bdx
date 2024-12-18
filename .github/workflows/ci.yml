@@ -59,13 +59,17 @@ jobs:
           sudo sed -i 's/^Types: deb/Types: deb deb-src/' /etc/apt/sources.list.d/*
 
           sudo apt-get update
+          sudo apt-get install build-essential
 
           # Xapian deps
-          sudo apt-get install build-essential zlib1g-dev uuid-dev
+          sudo apt-get install zlib1g-dev uuid-dev
           sudo apt-get build-dep libxapian-dev
 
           # Pygraphviz
           sudo apt-get install graphviz-dev
+
+          # For generating compile_commands.json file for tests
+          sudo apt-get install bear
 
           # Install prerequisites for xapian-bindings.
           # https://github.com/sphinx-doc/sphinx/issues/6524
@@ -100,7 +104,11 @@ jobs:
           sudo make install
 
       - name: Install the project
-        run: pip install -e .[dev,graphs]
+        run: |
+          pip install -e .[dev,graphs]
+
+          make -C tests/fixture compile_commands.json
+          git restore tests/fixture # Restore the committed .o files
 
       - name: Lint
         run: make lint
@@ -109,4 +117,4 @@ jobs:
         run: make checkformat
 
       - name: Tests
-        run: make check
+        run: make check PYTEST_ARGS='-v'

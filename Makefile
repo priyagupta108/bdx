@@ -1,4 +1,5 @@
 PYTHON ?= python3
+PYTEST_ARGS ?= '-v'
 
 black:
 	${PYTHON} -m black bdx/ tests/
@@ -25,7 +26,7 @@ ruff:
 lint: ruff mypy
 
 pytest:
-	${PYTHON} -m pytest
+	${PYTHON} -m pytest ${PYTEST_ARGS}
 
 check: pytest
 
