@@ -154,9 +154,9 @@ $ bdx search -n 5 -f '{size:0>10}|{section:<30}|{name}' tree
 
         bdx search relocations:malloc NOT relocations:free
 
-8. Search for symbols with size in some range:
+8. Search for symbols with size in some range, where address is at least 0xfff0:
 
-        bdx search foo size:100..200
+        bdx search foo size:100..200 address:0xfff0..
 
 9. Search for symbols by relative path:
 

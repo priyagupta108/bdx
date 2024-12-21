@@ -116,6 +116,13 @@ class IntegerField(DatabaseField):
         """Index ``value`` in the ``document``."""
         document.add_value(self.slot, self.preprocess_value(value))
 
+    @staticmethod
+    def _value_to_int(value: str) -> int:
+        if value.startswith("0x"):
+            return int(value[2:], base=16)
+        else:
+            return int(value, base=10)
+
     def make_query(self, value: str, wildcard: bool = False) -> xapian.Query:
         """Make a query for the given value.
 
@@ -125,15 +132,23 @@ class IntegerField(DatabaseField):
             wildcard: Unused.
 
         """
-        match = re.match("([0-9]+)?[.][.]([0-9]+)?|([0-9]+)", value)
+        hex_number = "(?:0x(?:[0-9a-fA-F])+)"
+        dec_number = "(?:[0-9]+)"
+        number = f"({hex_number}|{dec_number})"
+
+        match = re.match(
+            f"^{number}?[.][.]{number}?|{number}?$",
+            value,
+        )
         if not match:
-            return xapian.Query()
+            msg = f"Invalid integer range value: {value}"
+            raise ValueError(msg)
 
         start, end, eq = match.groups()
 
         if eq is not None:
             # Exact value
-            v = self.preprocess_value(int(eq))
+            v = self.preprocess_value(self._value_to_int(eq))
             return xapian.Query(
                 xapian.Query.OP_VALUE_RANGE,
                 self.slot,
@@ -144,20 +159,20 @@ class IntegerField(DatabaseField):
             return xapian.Query(
                 xapian.Query.OP_VALUE_RANGE,
                 self.slot,
-                (self.preprocess_value(int(start))),
-                (self.preprocess_value(int(end))),
+                (self.preprocess_value(self._value_to_int(start))),
+                (self.preprocess_value(self._value_to_int(end))),
             )
         elif start is not None:
             return xapian.Query(
                 xapian.Query.OP_VALUE_GE,
                 self.slot,
-                (self.preprocess_value(int(start))),
+                (self.preprocess_value(self._value_to_int(start))),
             )
         elif end is not None:
             return xapian.Query(
                 xapian.Query.OP_VALUE_LE,
                 self.slot,
-                (self.preprocess_value(int(end))),
+                (self.preprocess_value(self._value_to_int(end))),
             )
         else:
             msg = f"Invalid integer range query: {value}"

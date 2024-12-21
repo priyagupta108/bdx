@@ -226,6 +226,15 @@ def test_searching_camel_case(readonly_index):
     assert ccs in readonly_index.search("Camel")
 
 
+def test_searching_by_address(readonly_index):
+    symbols = readonly_index.search("address:0x10")
+    assert symbols.count > 0
+    for sym in symbols:
+        assert sym.address == 16
+    names = [x.name for x in symbols]
+    assert "c_function" in names
+
+
 def test_searching_by_size(readonly_index):
     symbols = readonly_index.search("size:8")
     for sym in symbols:
@@ -234,6 +243,13 @@ def test_searching_by_size(readonly_index):
     assert "other_top_level_symbol" in names
 
     symbols = readonly_index.search("size:32..128")
+    for sym in symbols:
+        assert 32 <= sym.size <= 128
+
+    names = [x.name for x in symbols]
+    assert "top_level_symbol" in names
+
+    symbols = readonly_index.search("size:0x20..0x80")
     for sym in symbols:
         assert 32 <= sym.size <= 128
 

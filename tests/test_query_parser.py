@@ -201,6 +201,9 @@ def test_intrange(query_parser):
     )
     query_parser.default_fields = ["value"]
 
+    assert xapian.sortable_serialise(123) == b"\xbb\xb0"
+    assert xapian.sortable_serialise(456) == b"\xc7\x20"
+    assert xapian.sortable_serialise(987) == b"\xcb\xb6"
     assert (
         query_to_str(query_parser.parse_query("123..456"))
         == "Query(VALUE_RANGE 99928 \\xbb\\xb0 \\xc7 )"
@@ -241,6 +244,51 @@ def test_intrange(query_parser):
             query_parser.parse_query("value:..12346 AND other_value:10..")
         )
         == "Query((VALUE_LE 99928 \\xda\\x07@ AND VALUE_GE 99929 \\xad))"
+    )
+
+    with pytest.raises(QueryParser.Error, match="Invalid integer range.*-1"):
+        query_parser.parse_query("value:-1")
+    with pytest.raises(QueryParser.Error, match="Invalid integer range.*1a"):
+        query_parser.parse_query("value:1a")
+    with pytest.raises(QueryParser.Error, match="Invalid integer range.*1_2"):
+        query_parser.parse_query("value:1_2")
+    with pytest.raises(QueryParser.Error, match="Invalid integer range.*[.]"):
+        query_parser.parse_query("value:.")
+
+
+def test_hex_intrange(query_parser):
+    slot = 99928
+    query_parser.schema = Schema(
+        [
+            IntegerField("value", "XV", slot=slot, key="value"),
+        ]
+    )
+    query_parser.default_fields = ["value"]
+
+    assert xapian.sortable_serialise(0x80) == b"\xc0"
+    assert xapian.sortable_serialise(0x100) == b"\xc4"
+
+    assert (
+        query_to_str(query_parser.parse_query("value:0x80"))
+        == "Query(VALUE_RANGE 99928 \\xc0 \\xc0)"
+    )
+
+    assert (
+        query_to_str(query_parser.parse_query("value:0x80..0x100"))
+        == "Query(VALUE_RANGE 99928 \\xc0 \\xc4)"
+    )
+    assert (
+        query_to_str(query_parser.parse_query("value:128..0x100"))
+        == "Query(VALUE_RANGE 99928 \\xc0 \\xc4)"
+    )
+    assert (
+        query_to_str(query_parser.parse_query("value:0x80..256"))
+        == "Query(VALUE_RANGE 99928 \\xc0 \\xc4)"
+    )
+
+    assert (
+        query_to_str(query_parser.parse_query("value:..0x100"))
+        == "Query(VALUE_LE 99928 \\xc4)"
     )
 
 

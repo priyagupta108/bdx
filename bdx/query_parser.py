@@ -119,7 +119,10 @@ class QueryParser:
         self._empty = xapian.Query()  # re-set it for tests
 
         self._next_token()
-        self._parse_query()
+        try:
+            self._parse_query()
+        except Exception as e:
+            raise QueryParser.Error(str(e)) from e
         self._expect(Token.EOF, "EOF")
         if self._parsed is None:
             return xapian.Query()
