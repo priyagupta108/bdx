@@ -92,31 +92,34 @@ provided.
 recognized.
 
 ```
-$ bdx search  -n 5 tree
-tree.o: _Z11count_treesP9tree_node
-tree.o: _Z11count_treesP9tree_node
-tree.o: _Z11count_treesP9tree_node
+$ bdx search -n 5 tree
 tree-eh.o: _ZL20outside_finally_tree8treempleP6gimple
+hooks.o: _Z14hook_void_treeP9tree_node
 tree-eh.o: _ZL22record_in_finally_tree8treempleP4gtry
+langhooks.o: _Z20lhd_return_null_treeP9tree_node
+langhooks.o: _Z23lhd_tree_dump_dump_treePvP9tree_node
 ```
 
-The `-n` argument sets the maximum number of symbols to search for.
+The `-n` option sets the maximum number of symbols to search for.
 
-The `-f` argument can be used to set output format (`json`, `sexp` or Python string format spec):
+The `--demangle-names` option makes the demangled name available to use in the
+output format string.
+
+The `-f` option can be used to set output format (`json`, `sexp` or Python string format spec):
 
 ```
-$ bdx search  -n 5 -f json tree
-{"path": "/src/gcc-12/build/gcc/cp/tree.o", "name": "_Z11count_treesP9tree_node", "section": ".text", "size": 51}
-{"path": "/src/gcc-12/build/stage1-gcc/cp/tree.o", "name": "_Z11count_treesP9tree_node", "section": ".text", "size": 50}
-{"path": "/src/gcc-12/build/prev-gcc/cp/tree.o", "name": "_Z11count_treesP9tree_node", "section": ".text", "size": 51}
-{"path": "/src/gcc-12/build/stage1-gcc/tree-eh.o", "name": "_ZL20outside_finally_tree8treempleP6gimple", "section": ".text", "size": 104}
-{"path": "/src/gcc-12/build/gcc/tree-eh.o", "name": "_ZL22record_in_finally_tree8treempleP4gtry", "section": ".text", "size": 415}
-$ bdx search -n 5 -f '{size:0>10}|{section:<30}|{name}' tree
-0000000051|.text                         |_Z11count_treesP9tree_node
-0000000050|.text                         |_Z11count_treesP9tree_node
-0000000051|.text                         |_Z11count_treesP9tree_node
-0000000104|.text                         |_ZL20outside_finally_tree8treempleP6gimple
-0000000415|.text                         |_ZL22record_in_finally_tree8treempleP4gtry
+$ bdx search -n 5 --demangle-names -f json tree
+{"path": "/src/gcc-12/build/stage1-gcc/tree-eh.o", "name": "_ZL20outside_finally_tree8treempleP6gimple", "section": ".text", "address": 12255, "size": 104, "type": "FUNC", "relocations": ["", "_ZN10hash_tableI19finally_tree_hasherLb0E11xcallocatorE4findERKP17finally_tree_node"], "mtime": 1652372105820280262, "demangled": "outside_finally_tree(treemple, gimple*)"}
+{"path": "/src/gcc-12/build/prev-gcc/hooks.o", "name": "_Z14hook_void_treeP9tree_node", "section": ".text", "address": 560, "size": 1, "type": "FUNC", "relocations": [], "mtime": 1652375092039025278, "demangled": "hook_void_tree(tree_node*)"}
+{"path": "/src/gcc-12/build/gcc/tree-eh.o", "name": "_ZL22record_in_finally_tree8treempleP4gtry", "section": ".text", "address": 13440, "size": 415, "type": "FUNC", "relocations": ["", "_Z11fancy_abortPKciS0_", "_ZN10hash_tableI19finally_tree_hasherLb0E11xcallocatorE6expandEv", "prime_tab", "xmalloc"], "mtime": 1652377778150208461, "demangled": "record_in_finally_tree(treemple, gtry*)"}
+{"path": "/src/gcc-12/build/stage1-gcc/langhooks.o", "name": "_Z20lhd_return_null_treeP9tree_node", "section": ".text", "address": 278, "size": 15, "type": "FUNC", "relocations": [], "mtime": 1652372076295950259, "demangled": "lhd_return_null_tree(tree_node*)"}
+{"path": "/src/gcc-12/build/stage1-gcc/langhooks.o", "name": "_Z23lhd_tree_dump_dump_treePvP9tree_node", "section": ".text", "address": 1692, "size": 19, "type": "FUNC", "relocations": [], "mtime": 1652372076295950259, "demangled": "lhd_tree_dump_dump_tree(void*, tree_node*)"}
+$ bdx search -n 5 --demangle-names -f '0x{address:0>10x}|{section:<10}|{type:8}|{demangled}' tree
+0x0000002fdf|.text     |FUNC    |outside_finally_tree(treemple, gimple*)
+0x0000000230|.text     |FUNC    |hook_void_tree(tree_node*)
+0x0000003480|.text     |FUNC    |record_in_finally_tree(treemple, gtry*)
+0x0000000116|.text     |FUNC    |lhd_return_null_tree(tree_node*)
+0x000000069c|.text     |FUNC    |lhd_tree_dump_dump_tree(void*, tree_node*)
 ```
 
 
