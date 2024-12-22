@@ -1,11 +1,15 @@
+from enum import Enum
 from pathlib import Path
 
 import pytest
 import xapian
-from pytest import fixture
 
-from bdx.index import DatabaseField, IntegerField, PathField, Schema
+# isort: off
+from bdx.index import DatabaseField, EnumField, IntegerField, PathField, Schema
 from bdx.query_parser import QueryParser
+
+# isort: on
+from pytest import fixture
 
 AND = xapian.Query.OP_AND
 OR = xapian.Query.OP_OR
@@ -312,6 +316,49 @@ def test_path_field(query_parser):
         (LEAF_TERM, "XPATHFOO"),
         (LEAF_TERM, f"XPATH{(Path() / 'FOO').absolute().resolve()}"),
     )
+
+
+def test_enumeration_field(query_parser):
+    class Enumeration(Enum):
+        FOO = "FOO"
+        FOO_2 = "FOO_2"
+        BAR = "BAR"
+
+    query_parser.schema = Schema(
+        [
+            EnumField("value", "XV", key="value", enum=Enumeration),
+        ]
+    )
+
+    assert query_to_tuple(query_parser.parse_query("value:FOO")) == (
+        LEAF_TERM,
+        "XVFOO",
+    )
+
+    assert query_to_tuple(query_parser.parse_query("value:BAR")) == (
+        LEAF_TERM,
+        "XVBAR",
+    )
+
+    with pytest.raises(
+        QueryParser.Error, match="Invalid value for 'value' field.*UNKNOWN"
+    ):
+        query_parser.parse_query("value:UNKNOWN")
+
+    assert (
+        query_to_str(query_parser.parse_query("value:F*"))
+        == "Query(WILDCARD SYNONYM XVF)"
+    )
+
+    assert (
+        query_to_str(query_parser.parse_query("value:B*"))
+        == "Query(WILDCARD SYNONYM XVB)"
+    )
+
+    with pytest.raises(
+        QueryParser.Error, match="Invalid prefix for 'value' field.*ZZZ"
+    ):
+        query_parser.parse_query("value:ZZZ*")
 
 
 def test_single_term_no_default_fields(query_parser):

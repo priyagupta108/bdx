@@ -108,6 +108,7 @@ def test_cli_search_json_output(fixture_path, index_path):
         "section": ".text",
         "address": 16,
         "size": 16,
+        "type": "FUNC",
         "relocations": ["foo"],
     }
     assert results_by_name["_Z12cxx_functionSt6vectorIiSaIiEE"] == {
@@ -117,6 +118,7 @@ def test_cli_search_json_output(fixture_path, index_path):
         "section": ".text",
         "address": 0,
         "size": 24,
+        "type": "FUNC",
         "relocations": ["bar", "foo"],
     }
 
@@ -143,6 +145,7 @@ def test_cli_search_sexp_output(fixture_path, index_path):
         ' :section ".text"'
         " :address 0"
         " :size 24"
+        ' :type "FUNC"'
         ' :relocations ("bar" "foo")'
         " :mtime XXX"
         ' :demangled "cxx_function(std::vector<int, std::allocator<int> >)"'

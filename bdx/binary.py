@@ -7,6 +7,7 @@ import subprocess
 from collections import defaultdict
 from dataclasses import dataclass, field, replace
 from datetime import datetime
+from enum import Enum
 from functools import cached_property, total_ordering
 from pathlib import Path
 from subprocess import Popen, check_output
@@ -14,6 +15,7 @@ from typing import IO, Iterator, Optional
 
 from elftools.elf.elffile import ELFFile
 from elftools.elf.relocation import Relocation, RelocationSection
+from elftools.elf.sections import Symbol as ELFSymbol
 from elftools.elf.sections import SymbolTableSection
 from sortedcontainers import SortedList
 
@@ -71,6 +73,39 @@ class NameDemangler:
         self._process = None
 
 
+class SymbolType(Enum):
+    """Enumeration for recognized ELF symbol types (STT_* values)."""
+
+    NOTYPE = 0
+    OBJECT = 1
+    FUNC = 2
+    SECTION = 3
+    FILE = 4
+    COMMON = 5
+    TLS = 6
+    NUM = 7
+    RELC = 8
+    SRELC = 9
+    LOOS = 10
+    LOOS_PLUS_ONE = 11
+    HIOS = 12
+    LOPROC = 13
+    LOPROC_PLUS_ONE = 14
+    HIPROC = 15
+
+    @staticmethod
+    def of_elf_symbol(symbol: ELFSymbol) -> "SymbolType":
+        """Return a symbol type from saved ST_INFO value."""
+        stt_type = symbol["st_info"]["type"]  # STT_* of Elf
+
+        # TODO: Recognize LOOS+1 and LOPROC+1
+
+        try:
+            return SymbolType[stt_type[len("STT_") :]]
+        except Exception:
+            return SymbolType.NOTYPE
+
+
 @total_ordering
 @dataclass(frozen=True, order=False)
 class Symbol:
@@ -81,6 +116,7 @@ class Symbol:
     section: str
     address: int
     size: int
+    type: SymbolType
     relocations: list[str] = field(hash=False)
     mtime: int
 
@@ -124,6 +160,7 @@ def _read_symtab(
                 section=section,
                 address=symbol["st_value"],
                 size=size,
+                type=SymbolType.of_elf_symbol(symbol),
                 relocations=list(),
                 mtime=mtime,
             )

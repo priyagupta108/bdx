@@ -138,37 +138,42 @@ $ bdx search -n 5 -f '{size:0>10}|{section:<30}|{name}' tree
 
         bdx search fullname:foo
 
-4. Search for symbols `foo*` in files named `bar.o`:
+4. Search for symbols where [Elf ST_INFO type][elf-manpage] is `STT_FUNC` or `STT_OBJECT`:
+
+        bdx search type:FUNC OR type:OBJECT
+
+5. Search for symbols `foo*` in files named `bar.o`:
 
         bdx search 'name:foo*' path:bar.o
 
-5. Search for symbols `foo` or `bar` that are not mangled (`_Z*` prefix):
+6. Search for symbols `foo` or `bar` that are not mangled (`_Z*` prefix):
 
         bdx search '(foo OR bar)' AND NOT name:_Z*
 
-6. Search for symbols that reference/call `memset`:
+7. Search for symbols that reference/call `memset`:
 
         bdx search relocations:memset
 
-7. Search for symbols that call `malloc`, but not `free`:
+8. Search for symbols that call `malloc`, but not `free`:
 
         bdx search relocations:malloc NOT relocations:free
 
-8. Search for symbols with size in some range, where address is at least 0xfff0:
+9. Search for symbols with size in some range, where address is at least 0xfff0:
 
         bdx search foo size:100..200 address:0xfff0..
 
-9. Search for symbols by relative path:
+10. Search for symbols by relative path:
 
         bdx search 'path:./build/module/*'
 
-10. Search for string literals:
+11. Search for string literals:
 
         bdx search 'path:"/path/to/File With Spaces.o"'
 
-11. Search for big symbols in some section:
+12. Search for big symbols in some section:
 
         bdx search section:.rodata AND size:1000..
+
 
 ## License ##
 
@@ -197,3 +202,4 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 [xapian]: https://xapian.org/
 [xapian-downloads]: https://xapian.org/download
 [xapian-bindings]: https://pypi.org/project/xapian-bindings/
+[elf-manpage]: https://manpages.ubuntu.com/manpages/oracular/en/man5/elf.5.html

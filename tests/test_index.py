@@ -1,6 +1,9 @@
 from shutil import rmtree
 
+import pytest
+
 # isort: off
+from bdx.binary import SymbolType
 from bdx.index import (
     IndexingOptions,
     SymbolIndex,
@@ -39,6 +42,7 @@ def test_indexing(fixture_path, tmp_path):
         assert top_level_symbol.section == ".rodata"
         assert top_level_symbol.address == 0
         assert top_level_symbol.size == 64
+        assert top_level_symbol.type == SymbolType.OBJECT
         assert top_level_symbol.relocations == []
         assert top_level_symbol.mtime > 0
 
@@ -47,17 +51,20 @@ def test_indexing(fixture_path, tmp_path):
         assert other_top_level_symbol.section == ".data.rel.ro.local"
         assert other_top_level_symbol.address == 0
         assert other_top_level_symbol.size == 8
+        assert other_top_level_symbol.type == SymbolType.OBJECT
         assert other_top_level_symbol.relocations == ["top_level_symbol"]
         assert other_top_level_symbol.mtime > 0
 
         assert bar.path == fixture_path / "subdir" / "bar.cpp.o"
         assert bar.name == "bar"
         assert bar.section == ".bss"
+        assert bar.type == SymbolType.OBJECT
         assert bar.relocations == []
 
         assert cxx_function.path == fixture_path / "subdir" / "bar.cpp.o"
         assert cxx_function.name == "_Z12cxx_functionSt6vectorIiSaIiEE"
         assert cxx_function.section == ".text"
+        assert cxx_function.type == SymbolType.FUNC
         assert cxx_function.relocations == [
             "bar",
             "foo",
@@ -66,11 +73,13 @@ def test_indexing(fixture_path, tmp_path):
         assert foo.path == fixture_path / "subdir" / "foo.c.o"
         assert foo.name == "foo"
         assert foo.section == ".bss"
+        assert foo.type == SymbolType.OBJECT
         assert foo.relocations == []
 
         assert c_function.path == fixture_path / "subdir" / "foo.c.o"
         assert c_function.name == "c_function"
         assert c_function.section == ".text"
+        assert c_function.type == SymbolType.FUNC
         assert c_function.relocations == [
             "foo",
         ]
@@ -80,11 +89,13 @@ def test_indexing(fixture_path, tmp_path):
             assert symbol.path == fixture_path / "subdir" / "foo.c.o"
             assert symbol.name == f"a_name{i}"
             assert symbol.section == ".bss"
+            assert symbol.type == SymbolType.OBJECT
             assert symbol.relocations == []
 
         assert camel_case_symbol.path == fixture_path / "subdir" / "foo.c.o"
         assert camel_case_symbol.name == "CamelCaseSymbol"
         assert camel_case_symbol.section == ".text"
+        assert camel_case_symbol.type == SymbolType.FUNC
         assert camel_case_symbol.relocations == []
 
         assert (
@@ -92,28 +103,34 @@ def test_indexing(fixture_path, tmp_path):
         )
         assert cpp_camel_case_symbol.name == "_Z18CppCamelCaseSymbolPKc"
         assert cpp_camel_case_symbol.section == ".text"
+        assert cpp_camel_case_symbol.type == SymbolType.FUNC
         assert cpp_camel_case_symbol.relocations == []
 
         assert main.path == fixture_path / "toplev.c.o"
         assert main.name == "main"
         assert main.section == ".text"
+        assert main.type == SymbolType.FUNC
         assert main.relocations == ["uses_c_function"]
 
         assert uses_c_function.path == fixture_path / "subdir" / "bar.cpp.o"
         assert uses_c_function.name == "uses_c_function"
         assert uses_c_function.section == ".text"
+        assert uses_c_function.type == SymbolType.FUNC
         assert uses_c_function.relocations == ["c_function"]
 
         assert foo_.path == fixture_path / "subdir" / "foo.c.o"
         assert foo_.section == ".bss"
+        assert foo_.type == SymbolType.OBJECT
         assert foo_.size == 4
 
         assert foo__.path == fixture_path / "subdir" / "foo.c.o"
         assert foo__.section == ".bss"
+        assert foo__.type == SymbolType.OBJECT
         assert foo__.size == 4
 
         assert uses_foo.path == fixture_path / "subdir" / "foo.c.o"
         assert uses_foo.section == ".text"
+        assert uses_foo.type == SymbolType.FUNC
         assert uses_foo.size == 16
 
 
@@ -255,6 +272,32 @@ def test_searching_by_size(readonly_index):
 
     names = [x.name for x in symbols]
     assert "top_level_symbol" in names
+
+
+def test_searching_by_type(readonly_index):
+    symbols = readonly_index.search("type:FUNC")
+    assert symbols.count > 0
+    for sym in symbols:
+        assert sym.type == SymbolType.FUNC
+    names = [x.name for x in symbols]
+    assert "main" in names
+
+    symbols = readonly_index.search("type:OBJECT")
+    assert symbols.count > 0
+    for sym in symbols:
+        assert sym.type == SymbolType.OBJECT
+    names = [x.name for x in symbols]
+    assert "bar" in names
+
+    symbols = readonly_index.search("type:F*")
+    assert symbols.count > 0
+    for sym in symbols:
+        assert sym.type in [SymbolType.FUNC, SymbolType.FILE]
+
+    with pytest.raises(
+        Exception, match="Invalid value for 'type' field.*INVALIDTYPE"
+    ):
+        readonly_index.search("type:INVALIDTYPE")
 
 
 def test_searching_by_relative_path(fixture_path, readonly_index, chdir):

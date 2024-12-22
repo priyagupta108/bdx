@@ -11,13 +11,14 @@ from collections.abc import Mapping
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
+from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, ClassVar, Dict, Iterator, List, Optional
 
 import xapian
 
 from bdx import debug, detail_log, log, make_progress_bar, trace
-from bdx.binary import BinaryDirectory, Symbol, read_symtable
+from bdx.binary import BinaryDirectory, Symbol, SymbolType, read_symtable
 
 MAX_TERM_SIZE = 244
 
@@ -272,6 +273,46 @@ class SymbolNameField(TextField):
 
 
 @dataclass(frozen=True)
+class EnumField(DatabaseField):
+    """DatabaseField that indexes values in an enumeration."""
+
+    enum: type[Enum]
+
+    def preprocess_value(self, value: Any) -> bytes:
+        """Preprocess the value before indexing it."""
+        if isinstance(value, self.enum):
+            return str(value.name).encode()
+        else:
+            return super().preprocess_value(value)
+
+    def index(self, document, value: Any):
+        """Index ``value`` in the ``document``."""
+        DatabaseField.index(self, document, value)
+
+    def make_query(self, value: str, wildcard: bool = False) -> xapian.Query:
+        """Make a query for ``value``."""
+        if wildcard:
+            is_recognized_value = any(
+                [x.startswith(value) for x in self.enum.__members__]
+            )
+        else:
+            is_recognized_value = value in self.enum.__members__
+
+        if not is_recognized_value:
+            supported_values = ",".join(self.enum.__members__)
+            msg = (
+                f"Invalid {'prefix' if wildcard else 'value'} "
+                f"for '{self.name}' field: '{value}'"
+                f" (supported: {supported_values})"
+            )
+            raise ValueError(msg)
+
+        query = super().make_query(value, wildcard)
+
+        return query
+
+
+@dataclass(frozen=True)
 class Schema(Mapping):
     """Contains information about database fields."""
 
@@ -342,6 +383,7 @@ class SymbolIndex:
             DatabaseField("section", "XSN", key="section"),
             IntegerField("address", "XA", slot=0, key="address"),
             IntegerField("size", "XSZ", slot=1, key="size"),
+            EnumField("type", "XT", key="type", enum=SymbolType),
             RelocationsField("relocations", "XR", key="relocations"),
             IntegerField("mtime", "XM", slot=2, key="mtime"),
         ]
@@ -747,6 +789,7 @@ def _index_single_file(file: Path) -> int:
                 section="",
                 address=0,
                 size=0,
+                type=SymbolType.NOTYPE,
                 relocations=list(),
                 mtime=file.stat().st_mtime_ns,
             )

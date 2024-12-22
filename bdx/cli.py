@@ -5,6 +5,7 @@ import os
 import sys
 import time
 from dataclasses import asdict
+from enum import Enum
 from functools import lru_cache, wraps
 from pathlib import Path
 from sys import exit
@@ -335,6 +336,9 @@ def search(_directory, index_path, query, num, format, demangle_names):
 
     def print_symbol(symbol: Symbol):
         def valueconv(v):
+            if isinstance(v, Enum):
+                return v.name
+
             try:
                 json.dumps(v)
                 return v
