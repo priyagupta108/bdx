@@ -164,7 +164,7 @@ def _common_options(index_must_exist=False):
                     raise click.BadParameter(msg) from e
             elif index_must_exist:
                 msg = f"Directory is not indexed: {directory}"
-                raise click.BadParameter(msg)
+                raise click.UsageError(msg)
 
             bdx.VERBOSITY = verbose
 
