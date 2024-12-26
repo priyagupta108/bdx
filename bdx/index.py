@@ -244,6 +244,9 @@ class SymbolNameField(TextField):
         # Find uppercase words
         upper_case_words = re.findall("[A-Z]{2,}", " ".join(letters_only))
 
+        # Find lowercase words
+        lower_case_words = re.findall("[a-z]{2,}", " ".join(letters_only))
+
         numbers = re.findall("[0-9]+", value)
         words_with_numbers = re.findall("[a-zA-Z]+[0-9]+", value)
 
@@ -252,6 +255,7 @@ class SymbolNameField(TextField):
             letters_only,
             camel_case_words,
             upper_case_words,
+            lower_case_words,
             numbers,
             words_with_numbers,
         ]:

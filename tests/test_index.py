@@ -413,6 +413,10 @@ def test_tokenize_symbol():
             "Case",
             "Foo",
             "FooBarCamelCase",
+            "amel",
+            "ar",
+            "ase",
+            "oo",
         ]
     )
 
@@ -423,6 +427,7 @@ def test_tokenize_symbol():
             "LSD",
             "LSDigitVALUE",
             "VALUE",
+            "igit",
         ]
     )
 
@@ -445,6 +450,11 @@ def test_tokenize_symbol():
             "cxx11",
             "cxxFunctionReturningStdVectorOfStringB",
             "cxxFunctionReturningStdVectorOfStringB5",
+            "ector",
+            "eturning",
+            "td",
+            "tring",
+            "unction",
         ]
     )
 
@@ -478,6 +488,7 @@ def test_tokenize_symbol():
             "basic",
             "boost",
             "boost9",
+            "ccepting",
             "char",
             "container",
             "container6",
@@ -485,10 +496,18 @@ def test_tokenize_symbol():
             "cxx1112",
             "cxxFunctionAcceptingBoostVectorOfStringN",
             "cxxFunctionAcceptingBoostVectorOfStringN5",
+            "ector",
+            "oost",
+            "string",
             "stringIcSt",
             "stringIcSt11",
+            "traits",
             "traitsIcESaIcEEEvvEE",
+            "tring",
+            "unction",
+            "vector",
             "vectorINSt",
             "vectorINSt7",
+            "vv",
         ]
     )
