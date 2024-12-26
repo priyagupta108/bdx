@@ -324,7 +324,7 @@ def search(_directory, index_path, query, num, format, demangle_names):
     """Search binary directory for symbols."""
     outdated_paths = set()
 
-    queue: list[Symbol] = list()
+    queue: list[tuple[int, int, Symbol]] = list()
 
     name_demangler = NameDemangler()
 
@@ -338,7 +338,7 @@ def search(_directory, index_path, query, num, format, demangle_names):
     def is_outdated(symbol: Symbol):
         return stat_mtime(symbol.path) != symbol.mtime
 
-    def print_symbol(symbol: Symbol):
+    def print_symbol(index: int, total: int, symbol: Symbol):
         def valueconv(v):
             if isinstance(v, Enum):
                 return v.name
@@ -353,6 +353,8 @@ def search(_directory, index_path, query, num, format, demangle_names):
             k: valueconv(v)
             for k, v in {
                 "outdated": is_outdated(symbol),
+                "index": index,
+                "total": total,
                 **asdict(symbol),
             }.items()
         }
@@ -385,13 +387,13 @@ def search(_directory, index_path, query, num, format, demangle_names):
 
     def flush_queue():
         while queue:
-            item = queue.pop(0)
-            print_symbol(item)
+            i, total, item = queue.pop(0)
+            print_symbol(i, total, item)
 
-    def callback(symbol: Symbol):
+    def callback(index: int, total: int, symbol: Symbol):
         if demangle_names:
             name_demangler.demangle_async(symbol.name)
-        queue.append(symbol)
+        queue.append((index, total, symbol))
         if len(queue) >= 128:
             flush_queue()
 

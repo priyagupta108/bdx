@@ -916,10 +916,20 @@ def index_binary_directory(
 def search_index(
     index_path: Path,
     query: str,
-    consumer: Callable[[Symbol], None],
+    consumer: Callable[[int, int, Symbol], None],
     limit: Optional[int] = None,
 ):
-    """Search the given index."""
+    """Search the given index.
+
+    Args:
+        index_path: The index to search.
+        query: The query to search for.
+        consumer: Called for each Symbol found.  The first argument is
+                  the index of the found Symbol within the results;
+                  the second is the total number of results.
+        limit: Optional limit of search results.
+
+    """
     if not query:
         query = "*:*"
 
@@ -930,5 +940,5 @@ def search_index(
         results = index.search(parsed_query, limit=limit)
         debug("Number of results: {}", results.count)
 
-        for symbol in results:
-            consumer(symbol)
+        for i, symbol in enumerate(results):
+            consumer(i, results.count, symbol)

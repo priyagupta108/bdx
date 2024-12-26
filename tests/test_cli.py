@@ -103,6 +103,8 @@ def test_cli_search_json_output(fixture_path, index_path):
 
     assert results_by_name["c_function"] == {
         "outdated": False,
+        "index": 1,
+        "total": 2,
         "path": str(fixture_path / "subdir" / "foo.c.o"),
         "name": "c_function",
         "demangled": "c_function",
@@ -114,6 +116,8 @@ def test_cli_search_json_output(fixture_path, index_path):
     }
     assert results_by_name["_Z12cxx_functionSt6vectorIiSaIiEE"] == {
         "outdated": False,
+        "index": 0,
+        "total": 2,
         "path": str(fixture_path / "subdir" / "bar.cpp.o"),
         "name": "_Z12cxx_functionSt6vectorIiSaIiEE",
         "demangled": "cxx_function(std::vector<int, std::allocator<int> >)",
@@ -143,6 +147,8 @@ def test_cli_search_sexp_output(fixture_path, index_path):
 
     assert (
         "(:outdated nil"
+        " :index 0"
+        " :total 2"
         ' :path "XXX/subdir/bar.cpp.o"'
         ' :name "_Z12cxx_functionSt6vectorIiSaIiEE"'
         ' :section ".text"'
