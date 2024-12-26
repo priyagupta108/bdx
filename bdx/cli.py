@@ -48,6 +48,8 @@ def sexp_format(data: Any) -> str:
             return f":{key} {sexp_format(value)}"
 
         return "({})".format(" ".join([fmt(x) for x in data.items()]))
+    elif isinstance(data, bool):
+        return "t" if data else "nil"
     elif isinstance(data, (str, int, float)):
         return json.dumps(data)
     msg = f"Invalid value: {data}"
@@ -327,12 +329,14 @@ def search(_directory, index_path, query, num, format, demangle_names):
     name_demangler = NameDemangler()
 
     @lru_cache
-    def is_outdated(symbol: Symbol):
+    def stat_mtime(path: Path):
         try:
-            os_mtime = symbol.path.stat().st_mtime_ns
+            return path.stat().st_mtime_ns
         except Exception:
-            os_mtime = 0
-        return os_mtime != symbol.mtime
+            return 0
+
+    def is_outdated(symbol: Symbol):
+        return stat_mtime(symbol.path) != symbol.mtime
 
     def print_symbol(symbol: Symbol):
         def valueconv(v):
@@ -348,7 +352,7 @@ def search(_directory, index_path, query, num, format, demangle_names):
         data = {
             k: valueconv(v)
             for k, v in {
-                "basename": symbol.path.name,
+                "outdated": is_outdated(symbol),
                 **asdict(symbol),
             }.items()
         }
@@ -361,12 +365,12 @@ def search(_directory, index_path, query, num, format, demangle_names):
             fmt = format
 
         if fmt == "json":
-            del data["basename"]
             click.echo(json.dumps(data))
         elif fmt == "sexp":
-            del data["basename"]
             click.echo(sexp_format(data))
         else:
+            data["basename"] = symbol.path.name
+
             try:
                 click.echo(fmt.format(**data))
             except (KeyError, ValueError, TypeError):
@@ -376,8 +380,8 @@ def search(_directory, index_path, query, num, format, demangle_names):
                 )
                 exit(1)
 
-            if is_outdated(symbol):
-                outdated_paths.add(symbol.path)
+        if is_outdated(symbol):
+            outdated_paths.add(symbol.path)
 
     def flush_queue():
         while queue:

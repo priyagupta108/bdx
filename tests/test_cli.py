@@ -102,6 +102,7 @@ def test_cli_search_json_output(fixture_path, index_path):
         results_by_name[x["name"]] = x
 
     assert results_by_name["c_function"] == {
+        "outdated": False,
         "path": str(fixture_path / "subdir" / "foo.c.o"),
         "name": "c_function",
         "demangled": "c_function",
@@ -112,6 +113,7 @@ def test_cli_search_json_output(fixture_path, index_path):
         "relocations": ["foo"],
     }
     assert results_by_name["_Z12cxx_functionSt6vectorIiSaIiEE"] == {
+        "outdated": False,
         "path": str(fixture_path / "subdir" / "bar.cpp.o"),
         "name": "_Z12cxx_functionSt6vectorIiSaIiEE",
         "demangled": "cxx_function(std::vector<int, std::allocator<int> >)",
@@ -140,7 +142,8 @@ def test_cli_search_sexp_output(fixture_path, index_path):
     results = [re.sub(f":mtime [0-9]+", ":mtime XXX", s) for s in results]
 
     assert (
-        '(:path "XXX/subdir/bar.cpp.o"'
+        "(:outdated nil"
+        ' :path "XXX/subdir/bar.cpp.o"'
         ' :name "_Z12cxx_functionSt6vectorIiSaIiEE"'
         ' :section ".text"'
         " :address 0"
