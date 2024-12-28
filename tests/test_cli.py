@@ -69,14 +69,20 @@ def test_cli_indexing_with_compile_commands(fixture_path, index_path, chdir):
         assert result.exit_code == 0
 
         searchresult = search_directory(
-            runner, index_path, "-f", "{basename}: {section}: {name}", "*:*"
+            runner,
+            index_path,
+            "-f",
+            "{basename}: {section}: {name}: {source}",
+            "*:*",
         )
         assert searchresult.exit_code == 0
 
         lines = searchresult.output.splitlines()
 
-        assert "foo.c.o: .text: c_function" in lines
-        assert "bar.cpp.o: .bss: bar" in lines
+        assert (
+            f"foo.c.o: .text: c_function: {fixture_path}/subdir/foo.c" in lines
+        )
+        assert f"bar.cpp.o: .bss: bar: {fixture_path}/subdir/bar.cpp" in lines
 
 
 def test_cli_search_json_output(fixture_path, index_path):
@@ -99,6 +105,7 @@ def test_cli_search_json_output(fixture_path, index_path):
     results_by_name = {}
     for x in results:
         del x["mtime"]
+        del x["source"]
         results_by_name[x["name"]] = x
 
     assert results_by_name["c_function"] == {
@@ -109,8 +116,8 @@ def test_cli_search_json_output(fixture_path, index_path):
         "name": "c_function",
         "demangled": "c_function",
         "section": ".text",
-        "address": 16,
-        "size": 16,
+        "address": 13,
+        "size": 13,
         "type": "FUNC",
         "relocations": ["foo"],
     }
@@ -144,12 +151,14 @@ def test_cli_search_sexp_output(fixture_path, index_path):
         re.sub(f':path "{str(fixture_path)}', ':path "XXX', s) for s in results
     ]
     results = [re.sub(f":mtime [0-9]+", ":mtime XXX", s) for s in results]
+    results = [re.sub(f":source .*? :", ":source XXX :", s) for s in results]
 
     assert (
         "(:outdated nil"
         " :index 0"
         " :total 2"
         ' :path "XXX/subdir/bar.cpp.o"'
+        " :source XXX"
         ' :name "_Z12cxx_functionSt6vectorIiSaIiEE"'
         ' :section ".text"'
         " :address 0"

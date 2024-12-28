@@ -6,10 +6,10 @@ FILES := \
 OBJFILES := $(patsubst %,%.o,${FILES})
 
 %.c.o: %.c
-	${CC} ${CFLAGS} -c -o $@ $^
+	${CC} ${CFLAGS} -g -c -o $@ $^
 
 %.cpp.o: %.cpp
-	${CXX} ${CFLAGS} -c -o $@ $^
+	${CXX} ${CFLAGS} -g -c -o $@ $^
 
 compile_commands.json: ${FILES}
 	bear -- ${MAKE} clean default

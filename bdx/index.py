@@ -18,8 +18,16 @@ from typing import Any, Callable, ClassVar, Dict, Iterator, List, Optional
 import xapian
 
 from bdx import debug, detail_log, log, make_progress_bar, trace
-from bdx.binary import BinaryDirectory, Symbol, SymbolType, read_symtable
 
+# isort: off
+from bdx.binary import (
+    BinaryDirectory,
+    Symbol,
+    SymbolType,
+    read_symbols_in_file,
+)
+
+# isort: on
 MAX_TERM_SIZE = 244
 
 
@@ -30,6 +38,7 @@ class IndexingOptions:
     num_processes: int = os.cpu_count() or 1
     index_relocations: bool = True
     min_symbol_size: int = 1
+    use_dwarfdump: bool = True
 
 
 @dataclass(frozen=True)
@@ -186,8 +195,10 @@ class PathField(DatabaseField):
     def preprocess_value(self, value: Any) -> bytes:
         """Normalize the path in given value."""
         try:
-            # Normalize the path
-            value = str(Path(value)).encode()
+            if value:
+                # Normalize the path
+                value = str(Path(value))
+            return value.encode()
         except ValueError:
             # Accept anything the user provides
             pass
@@ -317,6 +328,39 @@ class EnumField(DatabaseField):
 
 
 @dataclass(frozen=True)
+class _OptionalField(DatabaseField):
+    field: DatabaseField
+
+    def preprocess_value(self, value: Any) -> bytes:
+        """Preprocess the value before indexing it."""
+        if value is None:
+            return b""
+
+        return self.field.preprocess_value(value)
+
+    def index(self, document, value: Any):
+        """Index ``value`` in the ``document``."""
+        if value is None:
+            return
+
+        self.field.index(document, value)
+
+    def make_query(self, value: str, wildcard: bool = False) -> xapian.Query:
+        """Make a query for ``value``."""
+        return self.field.make_query(value, wildcard)
+
+
+def optional_field(field: DatabaseField) -> DatabaseField:
+    """Return a field that accepts ``None`` for indexing."""
+    return _OptionalField(
+        name=field.name,
+        prefix=field.prefix,
+        key=field.key,
+        field=field,
+    )
+
+
+@dataclass(frozen=True)
 class Schema(Mapping):
     """Contains information about database fields."""
 
@@ -382,6 +426,7 @@ class SymbolIndex:
     SCHEMA = Schema(
         [
             PathField("path", "XP", key="path"),
+            optional_field(PathField("source", "XSRC", key="source")),
             SymbolNameField("name", "XN", key="name"),
             DatabaseField("fullname", "XFN", key="name"),
             DatabaseField("section", "XSN", key="section"),
@@ -741,6 +786,7 @@ def sigint_catcher() -> Iterator[Callable[[], bool]]:
 class _WorkerContext:
     index: SymbolIndex
     options: IndexingOptions
+    use_compilation_database: bool
 
     instance: ClassVar["_WorkerContext"]
 
@@ -755,12 +801,15 @@ def _index_single_file(file: Path) -> int:
     context = _WorkerContext.instance
     index = context.index
     options = context.options
+    use_compilation_database = context.use_compilation_database
 
     try:
-        symtab = read_symtable(
+        symtab = read_symbols_in_file(
             file,
             with_relocations=options.index_relocations,
             min_symbol_size=options.min_symbol_size,
+            use_compilation_database=use_compilation_database,
+            use_dwarfdump=options.use_dwarfdump,
         )
     except Exception as e:
         log("{}: {}: {}", file.name, e.__class__.__name__, str(e))
@@ -789,6 +838,7 @@ def _index_single_file(file: Path) -> int:
         index.add_symbol(
             Symbol(
                 path=file,
+                source=None,
                 name="",
                 section="",
                 address=0,
@@ -810,9 +860,10 @@ def _init_pool_worker(
     stop_event,
     barrier,
     options: IndexingOptions,
+    use_compilation_database: bool,
 ):
     index = SymbolIndex.open_shard(index_path)
-    context = _WorkerContext(index, options)
+    context = _WorkerContext(index, options, use_compilation_database)
     runner = context.run()
 
     next(runner)
@@ -888,7 +939,13 @@ def index_binary_directory(
         pool_class(
             processes=num_processes,
             initializer=_init_pool_worker,
-            initargs=[index_path, stop_event, barrier, options],
+            initargs=[
+                index_path,
+                stop_event,
+                barrier,
+                options,
+                use_compilation_database,
+            ],
         ) as pool,
     ):
         perfile_iterator = pool.imap_unordered(

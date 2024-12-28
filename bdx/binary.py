@@ -8,7 +8,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from enum import Enum
-from functools import cached_property, total_ordering
+from functools import cache, cached_property, total_ordering
 from pathlib import Path
 from subprocess import Popen, check_output
 from typing import IO, Iterator, Optional
@@ -112,6 +112,7 @@ class Symbol:
     """Represents a symbol in a binary file."""
 
     path: Path
+    source: Optional[Path]
     name: str
     section: str
     address: int
@@ -131,10 +132,134 @@ class Symbol:
             return self.name
 
 
-def _read_symtab(
+class CompilationDatabase:
+    """Interface for retrieving data from ``compile_commands.json`` file."""
+
+    def __init__(self, path: Path):
+        """Construct a compilation database from file located at ``path``."""
+        self._path = path
+        self._source_to_binary: dict[Path, Path] = {}
+        self._binary_to_source: dict[Path, Path] = {}
+
+        self._read()
+
+    def get_source_file_for_binary(self, binary: Path) -> Optional[Path]:
+        """Return the source file for given binary file."""
+        return self._binary_to_source.get(binary)
+
+    def get_binary_for_source_file(self, source: Path) -> Optional[Path]:
+        """Return the binary file for given source file."""
+        return self._source_to_binary.get(source)
+
+    def get_all_binary_files(self) -> list[Path]:
+        """Get all known binary files."""
+        return list(self._binary_to_source.keys())
+
+    def _read(self):
+        path = self._path
+
+        with open(path) as f:
+            data = json.load(f)
+
+        for entry in data:
+            directory = Path(entry.get("directory", path.parent))
+            file = None
+            source_file = Path(entry["file"])
+            trace("For source file {}", source_file)
+
+            if "output" in entry:
+                file = Path(entry["output"])
+                trace("  Found binary file in 'output': {}", file)
+            elif "command" in entry:
+                command = entry["command"]
+                match = re.match(".* -o *([^ ]+).*", command)
+                if match:
+                    file = Path(match.group(1))
+                    trace("  Found binary file in 'command': {}", file)
+            elif "arguments" in entry:
+                args = entry["arguments"]
+                for prev, next in zip(args, args[1:]):
+                    if prev == "-o":
+                        file = Path(next)
+                        trace("  Found binary file in 'arguments': {}", file)
+                        break
+
+            if not file:
+                file = directory / (source_file.stem + ".o")
+                trace("  Assuming {} is binary", file)
+            if not file.is_absolute():
+                file = directory / file
+
+            self._source_to_binary[source_file] = file
+            self._binary_to_source[file] = source_file
+
+
+@cache
+def _read_compdb(path: Path, _mtime: int) -> CompilationDatabase:
+    return CompilationDatabase(path)
+
+
+def _find_source_file_compdb(elf: ELFFile) -> Optional[Path]:
+    binary_path = Path(elf.stream.name)
+    compdb_path = find_compilation_database(binary_path.parent)
+    if not compdb_path:
+        return None
+
+    compdb = _read_compdb(compdb_path, compdb_path.stat().st_mtime_ns)
+    return compdb.get_source_file_for_binary(binary_path)
+
+
+def _find_source_file_dwarfdump(elf: ELFFile) -> Optional[Path]:
+    try:
+        out = subprocess.check_output(
+            ["dwarfdump", "-r", elf.stream.name]
+        ).decode()
+    except Exception:
+        return None
+
+    match = re.match(
+        ".*DW_AT_name *([^\n]+).*DW_AT_comp_dir *([^\n]+).*",
+        out,
+        flags=re.MULTILINE | re.DOTALL,
+    )
+    if not match:
+        return None
+
+    dw_at_name, dw_at_comp_dir = match.groups()
+
+    path = Path(dw_at_comp_dir) / Path(dw_at_name)
+    if path.exists():
+        return path.resolve()
+    return None
+
+
+def _find_source_file(
+    elf: ELFFile,
+    use_compilation_database: bool,
+    use_dwarfdump: bool,
+) -> Optional[Path]:
+    path = None
+
+    if use_compilation_database:
+        path = _find_source_file_compdb(elf)
+
+    if not path and use_dwarfdump:
+        path = _find_source_file_dwarfdump(elf)
+
+    if path:
+        trace("Found source file for {}: {}", Path(elf.stream.name), path)
+    else:
+        trace("Could not find source file for {}", Path(elf.stream.name))
+
+    return path
+
+
+def _read_symbols_in_file(
     file: Path,
     elf: ELFFile,
     min_symbol_size: int,
+    use_compilation_database: bool,
+    use_dwarfdump: bool,
 ) -> list[Symbol]:
     symtab = elf.get_section_by_name(".symtab")
     if not isinstance(symtab, SymbolTableSection):
@@ -142,6 +267,11 @@ def _read_symtab(
         raise RuntimeError(msg)
 
     mtime = os.stat(elf.stream.fileno()).st_mtime_ns
+    source = _find_source_file(
+        elf,
+        use_compilation_database,
+        use_dwarfdump,
+    )
 
     symbols = []
     for symbol in symtab.iter_symbols():
@@ -156,6 +286,7 @@ def _read_symtab(
         symbols.append(
             Symbol(
                 path=Path(file),
+                source=source,
                 name=symbol.name,
                 section=section,
                 address=symbol["st_value"],
@@ -225,15 +356,34 @@ def _read_relocations(elf: ELFFile, symbols: list[Symbol]):
         symbol.relocations.extend(refs)
 
 
-def read_symtable(
+def read_symbols_in_file(
     file: str | Path,
     with_relocations: bool = True,
     min_symbol_size=1,
+    use_compilation_database: bool = True,
+    use_dwarfdump: bool = True,
 ) -> list[Symbol]:
-    """Get a symtable from the given file."""
+    """Get a symtable from the given file.
+
+    Args:
+        file: The binary file to read.
+        with_relocations: If True, populate ``relocations`` of each Symbol.
+            Setting this to False can significantly speed up reading.
+        min_symbol_size: Only return symbols whose size is greater or equal
+            to this.
+        use_compilation_database: If True, then use compile_commands.json
+            file (if it exists) to get the source files for each symbol.
+        use_dwarfdump: If True, then use the ``dwarfdump`` program (if it
+            exists) to get the source files for each symbol (if available).
+
+    """
     with open(file, "rb") as f, ELFFile(f) as elf:
-        symbols = _read_symtab(
-            Path(file), elf, min_symbol_size=min_symbol_size
+        symbols = _read_symbols_in_file(
+            Path(file),
+            elf,
+            min_symbol_size=min_symbol_size,
+            use_compilation_database=use_compilation_database,
+            use_dwarfdump=use_dwarfdump,
         )
 
         if with_relocations:
@@ -242,6 +392,7 @@ def read_symtable(
         return symbols
 
 
+@cache
 def find_compilation_database(path: Path) -> Optional[Path]:
     """Find the compilation db file in ``path`` or any of it's parent dirs."""
     for dir in [path, *path.parents]:
@@ -334,37 +485,8 @@ class BinaryDirectory:
             )
             raise BinaryDirectory.CompilationDatabaseNotFoundError(msg)
 
-        with open(path, "r") as f:
-            data = json.load(f)
+        compdb = _read_compdb(path, path.stat().st_mtime_ns)
 
-        for entry in data:
-            directory = Path(entry.get("directory", path.parent))
-            file = None
-            source_file = Path(entry["file"])
-            trace("For source file {}", source_file)
-
-            if "output" in entry:
-                file = Path(entry["output"])
-                trace("  Found binary file in 'output': {}", file)
-            elif "command" in entry:
-                command = entry["command"]
-                match = re.match(".* -o *([^ ]+).*", command)
-                if match:
-                    file = Path(match.group(1))
-                    trace("  Found binary file in 'command': {}", file)
-            elif "arguments" in entry:
-                args = entry["arguments"]
-                for prev, next in zip(args, args[1:]):
-                    if prev == "-o":
-                        file = Path(next)
-                        trace("  Found binary file in 'arguments': {}", file)
-                        break
-
-            if not file:
-                file = directory / (source_file.stem + ".o")
-                trace("  Assuming {} is binary", file)
-            if not file.is_absolute():
-                file = directory / file
-
+        for file in compdb.get_all_binary_files():
             if is_readable_elf_file(file):
                 yield file

@@ -1,6 +1,8 @@
-int foo;
-int foo_;
-int foo__;
+#include <stdint.h>
+
+uint64_t foo;
+uint64_t foo_;
+int foo__; /* Should be at address 0x10 */
 
 int uses_foo() { return foo; }
 

@@ -39,7 +39,9 @@ def sexp_format(data: Any) -> str:
 
     Dicts are formatted as plists, with keys formatted in ``:key`` format.
     """
-    if isinstance(data, list):
+    if data is None:
+        return "nil"
+    elif isinstance(data, list):
         return "({})".format(" ".join([sexp_format(x) for x in data]))
     elif isinstance(data, dict):
 

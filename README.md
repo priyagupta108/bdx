@@ -145,35 +145,39 @@ $ bdx search -n 5 --demangle-names -f '0x{address:0>10x}|{section:<10}|{type:8}|
 
         bdx search type:FUNC OR type:OBJECT
 
-5. Search for symbols `foo*` in files named `bar.o`:
+5. Search for symbols `foo*` in binary files named `bar.o`:
 
         bdx search 'name:foo*' path:bar.o
 
-6. Search for symbols `foo` or `bar` that are not mangled (`_Z*` prefix):
+6. Search for symbols in files compiled from source file named `file.c`:
+
+        bdx search source:file.c
+
+7. Search for symbols `foo` or `bar` that are not mangled (`_Z*` prefix):
 
         bdx search '(foo OR bar)' AND NOT name:_Z*
 
-7. Search for symbols that reference/call `memset`:
+8. Search for symbols that reference/call `memset`:
 
         bdx search relocations:memset
 
-8. Search for symbols that call `malloc`, but not `free`:
+9. Search for symbols that call `malloc`, but not `free`:
 
         bdx search relocations:malloc NOT relocations:free
 
-9. Search for symbols with size in some range, where address is at least 0xfff0:
+10. Search for symbols with size in some range, where address is at least 0xfff0:
 
         bdx search foo size:100..200 address:0xfff0..
 
-10. Search for symbols by relative path:
+11. Search for symbols by relative path of the binary:
 
         bdx search 'path:./build/module/*'
 
-11. Search for string literals:
+12. Search for string literals:
 
         bdx search 'path:"/path/to/File With Spaces.o"'
 
-12. Search for big symbols in some section:
+13. Search for big symbols in some section:
 
         bdx search section:.rodata AND size:1000..
 

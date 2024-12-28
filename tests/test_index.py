@@ -1,3 +1,4 @@
+import shutil
 from shutil import rmtree
 
 import pytest
@@ -121,7 +122,7 @@ def test_indexing(fixture_path, tmp_path):
         assert foo_.path == fixture_path / "subdir" / "foo.c.o"
         assert foo_.section == ".bss"
         assert foo_.type == SymbolType.OBJECT
-        assert foo_.size == 4
+        assert foo_.size == 8
 
         assert foo__.path == fixture_path / "subdir" / "foo.c.o"
         assert foo__.section == ".bss"
@@ -131,7 +132,7 @@ def test_indexing(fixture_path, tmp_path):
         assert uses_foo.path == fixture_path / "subdir" / "foo.c.o"
         assert uses_foo.section == ".text"
         assert uses_foo.type == SymbolType.FUNC
-        assert uses_foo.size == 16
+        assert uses_foo.size == 13
 
 
 def test_indexing_min_symbol_size(fixture_path, tmp_path):
@@ -175,6 +176,60 @@ def test_indexing_without_relocations(fixture_path, tmp_path):
 
         for symbol in symbols:
             assert not symbol.relocations
+
+
+def test_indexing_adds_source_field_with_dwarfdump(fixture_path, tmp_path):
+    """Check that ``source`` is set when using dwarfdump program."""
+    if not shutil.which("dwarfdump"):
+        pytest.skip(reason=("dwarfdump program not available"))
+
+    index_path = tmp_path / "index"
+    index_binary_directory(
+        fixture_path, index_path, IndexingOptions(use_dwarfdump=True)
+    )
+
+    with SymbolIndex.open(index_path, readonly=True) as index:
+        symbols = list(index.search("path:toplev.c.o"))
+        assert symbols
+        for symbol in symbols:
+            assert symbol.source == fixture_path / "toplev.c"
+
+        symbols = list(index.search("path:foo.c.o"))
+        assert symbols
+        for symbol in symbols:
+            assert symbol.source == fixture_path / "subdir" / "foo.c"
+
+
+def test_indexing_adds_source_field_with_compilation_database(
+    fixture_path, tmp_path
+):
+    """Check that ``source`` is set when using compile_commands.json."""
+    if not (fixture_path / "compile_commands.json").exists():
+        pytest.skip(
+            reason=(
+                "compile_commands.json not generated, do: "
+                f"`make -C {fixture_path} compile_commands.json`"
+            )
+        )
+
+    index_path = tmp_path / "index"
+    index_binary_directory(
+        fixture_path,
+        index_path,
+        IndexingOptions(use_dwarfdump=False),
+        use_compilation_database=True,
+    )
+
+    with SymbolIndex.open(index_path, readonly=True) as index:
+        symbols = list(index.search("path:toplev.c.o"))
+        assert symbols
+        for symbol in symbols:
+            assert symbol.source == fixture_path / "toplev.c"
+
+        symbols = list(index.search("path:foo.c.o"))
+        assert symbols
+        for symbol in symbols:
+            assert symbol.source == fixture_path / "subdir" / "foo.c"
 
 
 def test_searching_by_wildcard(readonly_index):
@@ -249,7 +304,7 @@ def test_searching_by_address(readonly_index):
     for sym in symbols:
         assert sym.address == 16
     names = [x.name for x in symbols]
-    assert "c_function" in names
+    assert "foo__" in names
 
 
 def test_searching_by_size(readonly_index):
