@@ -428,7 +428,22 @@ def files(_directory, index_path):
     """List all indexed files in a binary directory."""
     with SymbolIndex.open(index_path, readonly=True) as index:
         for path in index.all_files():
-            print(path)
+            click.echo(path)
+
+
+@cli.command()
+@click.argument(
+    "field",
+    type=click.Choice([x.name for x in SymbolIndex.SCHEMA.fields]),
+    metavar="FIELD",
+)
+@click.argument("prefix", default="")
+@_common_options(index_must_exist=True)
+def complete_prefix(_directory, index_path, field, prefix):
+    """Print all possible completions of the given prefix for given field."""
+    with SymbolIndex.open(index_path, readonly=True) as index:
+        for value in index.iter_prefix(field, prefix):
+            click.echo(value)
 
 
 if have_graphs:

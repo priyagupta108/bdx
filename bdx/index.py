@@ -418,7 +418,7 @@ class SymbolIndex:
         mset: xapian.MSet = field(repr=False)
 
         def __iter__(self) -> Iterator[Symbol]:
-            for match in self.mset:
+            for match in self.mset:  # pyright: ignore
                 document = match.document
                 pickled_data = document.get_data()
                 yield pickle.loads(pickled_data)
@@ -683,15 +683,22 @@ class SymbolIndex:
 
     def all_files(self) -> Iterator[Path]:
         """Yield all the files indexed in this SymbolIndex."""
+        for value in self.iter_prefix("path", ""):
+            path = Path(value)
+            if path.is_absolute():
+                yield path
+
+    def iter_prefix(self, field: str, value_prefix: str) -> Iterator[str]:
+        """Return all the possible values for ``field`` with given prefix."""
         db = self._live_db()
-        field_data = self.schema["path"]
-        all_terms = db.allterms(field_data.prefix)  # pyright: ignore
+        field_data = self.schema[field]
+        all_terms = db.allterms(  # pyright: ignore
+            field_data.prefix + value_prefix
+        )
 
         for term in all_terms:
             value = term.term[len(field_data.prefix) :]
-            path = Path(value.decode())
-            if path.is_absolute():
-                yield path
+            yield value.decode()
 
     def search(
         self,
