@@ -245,7 +245,8 @@ class QueryParser:
             self._parse_field()
 
             if field not in self.schema:
-                msg = f"Unknown field {field}"
+                known = ", ".join(self.schema.keys())
+                msg = f'Unknown field "{field}", must be one of [{known}]'
                 raise QueryParser.Error(msg)
 
             value_present = self._token in [
