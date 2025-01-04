@@ -70,6 +70,10 @@ Available options:
 - `min_symbol_size` - (default 1) only index symbols with size equal to or
   greater than this.
 
+- `use_dwarfdump` - if True (the default), use `dwarfdump` program, if it's
+  available, to find the source file for a compiled file, if it can't be found
+  in any other way.
+
 ### Graph generation ###
 
 Generate an SVG image showing at most 20 routes from symbol `main` in
