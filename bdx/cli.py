@@ -196,6 +196,7 @@ class IndexingOptionParamType(click.ParamType):
         "num_processes": IntRange(min=1, max=(os.cpu_count() or 1) * 2),
         "index_relocations": BoolParamType(),
         "min_symbol_size": IntRange(min=0),
+        "use_dwarfdump": BoolParamType(),
     }
 
     def convert(self, value, param, ctx):
