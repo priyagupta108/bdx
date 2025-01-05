@@ -13,11 +13,25 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, ClassVar, Dict, Iterator, List, Optional
+from queue import Empty as QueueEmpty
+from queue import Queue
 
+# isort: off
+from typing import (
+    Any,
+    Callable,
+    Collection,
+    Dict,
+    Iterator,
+    List,
+    Optional,
+    Type,
+)
+
+# isort: on
 import xapian
 
-from bdx import debug, detail_log, log, make_progress_bar, trace
+from bdx import debug, detail_log, error, log, make_progress_bar, trace
 
 # isort: off
 from bdx.binary import (
@@ -791,27 +805,12 @@ def sigint_catcher() -> Iterator[Callable[[], bool]]:
         signal.signal(signal.SIGINT, original_handler)
 
 
-@dataclass
-class _WorkerContext:
-    index: SymbolIndex
-    options: IndexingOptions
-    use_compilation_database: bool
-
-    instance: ClassVar["_WorkerContext"]
-
-    def run(self):
-        with self.index.transaction():
-            yield
-
-        self.index.close()
-
-
-def _index_single_file(file: Path) -> int:
-    context = _WorkerContext.instance
-    index = context.index
-    options = context.options
-    use_compilation_database = context.use_compilation_database
-
+def _index_single_file(
+    index: SymbolIndex,
+    file: Path,
+    options: IndexingOptions,
+    use_compilation_database: bool,
+) -> int:
     try:
         symtab = read_symbols_in_file(
             file,
@@ -865,30 +864,117 @@ def _index_single_file(file: Path) -> int:
     return num
 
 
-def _init_pool_worker(
-    index_path,
-    stop_event,
-    barrier,
-    options: IndexingOptions,
-    use_compilation_database: bool,
-):
-    index = SymbolIndex.open_shard(index_path)
-    context = _WorkerContext(index, options, use_compilation_database)
-    runner = context.run()
+class _WorkerPool:
+    """Runs indexing jobs in parallel."""
 
-    next(runner)
+    def __init__(
+        self,
+        options: IndexingOptions,
+        should_quit: Callable[[], bool],
+        index_path: Path,
+        use_compilation_database: bool,
+    ):
+        self.options = options
+        self.should_quit = should_quit
+        self.index_path = index_path
+        self.use_compilation_database = use_compilation_database
 
-    def watchdog_thread():
-        stop_event.wait()
-        try:
-            next(runner)
-        except StopIteration:
-            pass
-        barrier.wait()
+        self._job_queue: Queue[Path]
+        self._result_queue: Queue[int]
+        self._worker_class: Type
+        self._workers: list[mp.Process]
 
-    threading.Thread(target=watchdog_thread).start()
+        if os.getenv("_BDX_NO_MULTIPROCESSING"):
+            self._job_queue = Queue()
+            self._result_queue = Queue()
+            self._stop_event = threading.Event()
+            self._worker_class = threading.Thread  # type: ignore
+            self._workers = []
+            self._num_processes = 1
+        else:
+            self._job_queue = mp.Queue()  # type: ignore
+            self._result_queue = mp.Queue()  # type: ignore
+            self._stop_event = mp.Event()  # type: ignore
+            self._worker_class = mp.Process
+            self._workers = []
+            self._num_processes = options.num_processes
 
-    _WorkerContext.instance = context
+    def __enter__(self):
+        if self._workers:
+            msg = "Pool already running"
+            raise RuntimeError(msg)
+
+        for _ in range(self._num_processes):
+            worker = self._worker_class(target=self._worker)
+            self._workers.append(worker)
+
+        for worker in self._workers:
+            worker.start()
+
+        return self
+
+    def __exit__(self, *_args):
+        self._stop_event.set()
+        for worker in self._workers:
+            worker.join()
+        self._workers.clear()
+        self._stop_event.clear()
+        while True:
+            try:
+                self._job_queue.get_nowait()
+            except QueueEmpty:
+                break
+
+    def index_files(self, files: Collection[Path]) -> Iterator[int]:
+        if not self._workers:
+            msg = "Pool is not running"
+            raise RuntimeError(msg)
+        if not files:
+            return
+        for file in files:
+            self._job_queue.put(file)
+
+        num_done = 0
+
+        while not self.should_quit():
+            try:
+                result = self._result_queue.get(timeout=0.1)
+                yield result
+                num_done += 1
+
+                if num_done == len(files):
+                    break
+            except QueueEmpty:
+                pass
+
+            some_workers_failed = not all(
+                [x.is_alive() for x in self._workers]
+            )
+
+            if some_workers_failed:
+                log("error: Some workers failed")
+                break
+
+    def _worker(self):
+        with (
+            SymbolIndex.open_shard(self.index_path) as index,
+            index.transaction(),
+        ):
+            while not self._stop_event.is_set():
+                parent = mp.parent_process()
+                if parent is not None and not parent.is_alive():
+                    error("Parent process died")
+
+                try:
+                    path = self._job_queue.get(timeout=0.1)
+                except QueueEmpty:
+                    continue
+
+                result = _index_single_file(
+                    index, path, self.options, self.use_compilation_database
+                )
+
+                self._result_queue.put(result)
 
 
 def index_binary_directory(
@@ -932,35 +1018,16 @@ def index_binary_directory(
             index.delete_file(file)
             debug("File deleted: {}", file)
 
-    pool_class: Callable = mp.Pool
-    num_processes = options.num_processes
-
-    if os.getenv("_BDX_NO_MULTIPROCESSING"):
-        from multiprocessing.pool import ThreadPool
-
-        pool_class = ThreadPool
-        num_processes = 1
-
-    stop_event = mp.Event()
-    barrier = mp.Barrier(num_processes + 1)
-
     with (
         sigint_catcher() as interrupted,
-        pool_class(
-            processes=num_processes,
-            initializer=_init_pool_worker,
-            initargs=[
-                index_path,
-                stop_event,
-                barrier,
-                options,
-                use_compilation_database,
-            ],
+        _WorkerPool(
+            options,
+            interrupted,
+            index_path,
+            use_compilation_database=use_compilation_database,
         ) as pool,
     ):
-        perfile_iterator = pool.imap_unordered(
-            _index_single_file, changed_files
-        )
+        perfile_iterator = pool.index_files(changed_files)
 
         iterator = make_progress_bar(
             perfile_iterator, unit="file", total=len(changed_files)
@@ -973,9 +1040,6 @@ def index_binary_directory(
             if interrupted():
                 log("Interrupted, exiting")
                 break
-
-        stop_event.set()
-        barrier.wait()
 
     return stats
 
