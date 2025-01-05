@@ -1,5 +1,7 @@
 import os.path
 import sys
+import traceback as tb
+from multiprocessing import Lock
 from pathlib import Path
 
 import click
@@ -7,20 +9,38 @@ import tqdm
 
 VERBOSITY = 0
 
+MAIN_PID = os.getpid()
+
+_lock = Lock()
+
 
 def log(msg, *args):
     """Print ``msg`` to stderr."""
     try:
+        pid = os.getpid()
 
         def prettify_arg(arg):
             if isinstance(arg, Path) and arg.is_absolute():
                 return os.path.relpath(arg)
 
+            if isinstance(arg, Exception):
+                return "\n".join(tb.format_exception(arg))
+
             return arg
 
-        pretty_args = [prettify_arg(p) for p in args]
+        def format_log_line(line):
+            if pid != MAIN_PID:
+                line = "[{}] {}".format(pid, line)
 
-        click.echo(msg.format(*pretty_args), file=sys.stderr)
+            return line
+
+        pretty_args = [prettify_arg(p) for p in args]
+        msg = msg.format(*pretty_args)
+        msg = "\n".join(format_log_line(line) for line in msg.splitlines())
+
+        with _lock:
+            click.echo(msg, file=sys.stderr)
+
     except Exception as e:
         print(f"Logging error: {e}", file=sys.stderr)
         print(msg, file=sys.stderr)

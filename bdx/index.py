@@ -819,7 +819,8 @@ def _index_single_file(file: Path) -> int:
             use_dwarfdump=options.use_dwarfdump,
         )
     except Exception as e:
-        log("{}: {}: {}", file.name, e.__class__.__name__, str(e))
+        log("{}: {}: {}", file, e.__class__.__name__, str(e))
+        debug("{}", e)
         return 0
 
     num = 0
