@@ -481,6 +481,8 @@ class SymbolIndex:
                 self._db = xapian.Database(str(path))
             else:
                 self._db = xapian.WritableDatabase(str(path))
+
+            trace("Opened xapian database (is_shard={}): {}", is_shard, path)
         except xapian.DatabaseOpeningError as e:
             if not path.is_dir():
                 msg = f"SymbolIndex does not exist: {path}"
@@ -506,7 +508,7 @@ class SymbolIndex:
         self._is_shard = is_shard
         if not is_shard:
             for shard in self.shards():
-                trace("Opening shard: {}", shard)
+                trace("Adding shard: {}", shard)
                 if readonly:
                     db = xapian.Database(str(shard))
                 else:
