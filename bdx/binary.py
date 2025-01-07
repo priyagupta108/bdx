@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import ctypes
+import ctypes.util
 import json
 import os
 import re
+import shutil
 import subprocess
 from collections import defaultdict
 from dataclasses import dataclass, field, replace
@@ -10,8 +13,7 @@ from datetime import datetime
 from enum import Enum
 from functools import cache, cached_property, total_ordering
 from pathlib import Path
-from subprocess import Popen, check_output
-from typing import IO, Iterator, Optional
+from typing import ClassVar, Iterator, Optional
 
 from elftools.elf.elffile import ELFFile
 from elftools.elf.relocation import Relocation, RelocationSection
@@ -23,54 +25,95 @@ from bdx import info, trace
 
 
 class NameDemangler:
-    """A class for batch async demangling of names with c++filt program."""
+    """A class for demangling names with C++ standard library."""
+
+    _INSTANCE: ClassVar[Optional["NameDemangler"]] = None
 
     def __init__(self):
-        """Create a new demangler, with no process.
+        """Create a new name demangler."""
+        self._libcxx: Optional[ctypes.CDLL] = None
+        self._libc: Optional[ctypes.CDLL] = None
+        self._demangle_func = None
+        self._free_func = None
 
-        The process is started in ``demangle_async``.
-        """
-        self._process: Optional[Popen] = None
-        self._dict = {}
+        # As a fallback, we use c++filt program
+        self._cxxfilt = shutil.which("c++filt")
 
-    def __enter__(self) -> "NameDemangler":
-        return self
+        lib_path = ctypes.util.find_library("c")
+        trace("Libc path: {}", lib_path)
 
-    def __exit__(self, *_args, **_kwargs):
-        self._close()
+        if lib_path:
+            lib = ctypes.CDLL(lib_path)
+            func = lib.free if lib else None
 
-    def demangle_async(self, name: str) -> None:
-        """Send ``name`` for demangling.
+            if lib and func:
+                func.argtypes = [ctypes.c_void_p]
+                func.restype = None
+                self._free_func = func
+                self._libc = lib
 
-        The result can be retrieved with ``get_demangled_name``.
-        """
-        if not self._process:
-            self._process = Popen(
-                ["c++filt"], stdin=subprocess.PIPE, stdout=subprocess.PIPE
+        if not self._libc:
+            return
+
+        lib_path = ctypes.util.find_library("stdc++")
+        trace("Libstdc++ path: {}", lib_path)
+
+        if lib_path:
+            lib = ctypes.CDLL(lib_path)
+            func = getattr(lib, "__cxa_demangle") if lib else None
+
+            if lib and func:
+                func.argtypes = [
+                    ctypes.c_char_p,
+                    ctypes.c_char_p,
+                    ctypes.c_void_p,
+                    ctypes.c_void_p,
+                ]
+                func.restype = ctypes.c_void_p
+
+                self._libcxx = lib
+                self._demangle_func = func
+
+    @classmethod
+    def instance(cls) -> "NameDemangler":
+        """Get the singleton instance of this class."""
+        inst = cls._INSTANCE or cls()
+        cls._INSTANCE = inst
+        return inst
+
+    def demangle(self, mangled_name: str) -> Optional[str]:
+        """Demangle a symbol name."""
+        if self._demangle_func is not None:
+            assert self._free_func
+
+            name_ptr = ctypes.c_char_p(mangled_name.encode())
+            status = ctypes.c_int()
+            status_ptr = ctypes.pointer(status)
+
+            # https://gcc.gnu.org/onlinedocs/libstdc++/libstdc++-html-USERS-4.3/a01696.html
+            # char* __cxa_demangle (
+            #     const char *  mangled_name,
+            #     char *        output_buffer,
+            #     size_t *      length,
+            #     int *         status
+            # )
+            retval = self._demangle_func(name_ptr, None, None, status_ptr)
+
+            if status.value == 0:
+                try:
+                    demangled = ctypes.c_char_p(retval).value
+                    if demangled:
+                        return demangled.decode()
+                finally:
+                    self._free_func(retval)
+        elif self._cxxfilt:
+            return (
+                subprocess.check_output([self._cxxfilt, mangled_name])
+                .decode()
+                .strip()
             )
 
-        stdin: IO = self._process.stdin  # type: ignore
-
-        stdin.write(json.dumps({f"MANGLED_{name}": name}).encode())
-        stdin.write(b"\n")
-
-    def get_demangled_name(self, mangled_name: str) -> Optional[str]:
-        """Get a demangled name that was mangled in ``demangle_async``."""
-        if self._process:
-            stdout, _stderr = self._process.communicate()
-            for line in stdout.splitlines():
-                d = json.loads(line)
-                self._dict.update(d)
-            self._close()
-
-        return self._dict.get(f"MANGLED_{mangled_name}")
-
-    def _close(self):
-        if self._process:
-            self._process.terminate()
-            self._process.wait(0.5)
-            self._process.kill()
-        self._process = None
+        return None
 
 
 class SymbolType(Enum):
@@ -126,10 +169,8 @@ class Symbol:
 
     def demangle_name(self):
         """Return the demangled name."""
-        try:
-            return check_output(["c++filt", self.name]).decode().strip()
-        except Exception:
-            return self.name
+        with NameDemangler() as nd:
+            return nd.demangle(self.name)
 
 
 class CompilationDatabase:

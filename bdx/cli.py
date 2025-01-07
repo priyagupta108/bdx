@@ -327,8 +327,6 @@ def search(_directory, index_path, query, num, format, demangle_names):
     """Search binary directory for symbols."""
     outdated_paths = set()
 
-    queue: list[tuple[int, int, Symbol]] = list()
-
     name_demangler = NameDemangler()
 
     @lru_cache
@@ -341,7 +339,7 @@ def search(_directory, index_path, query, num, format, demangle_names):
     def is_outdated(symbol: Symbol):
         return stat_mtime(symbol.path) != symbol.mtime
 
-    def print_symbol(index: int, total: int, symbol: Symbol):
+    def callback(index: int, total: int, symbol: Symbol):
         def valueconv(v):
             if isinstance(v, Enum):
                 return v.name
@@ -362,7 +360,7 @@ def search(_directory, index_path, query, num, format, demangle_names):
             }.items()
         }
         if demangle_names:
-            data["demangled"] = name_demangler.get_demangled_name(symbol.name)
+            data["demangled"] = name_demangler.demangle(symbol.name)
 
         if format is None:
             fmt = "{basename}: {name}"
@@ -388,18 +386,6 @@ def search(_directory, index_path, query, num, format, demangle_names):
         if is_outdated(symbol):
             outdated_paths.add(symbol.path)
 
-    def flush_queue():
-        while queue:
-            i, total, item = queue.pop(0)
-            print_symbol(i, total, item)
-
-    def callback(index: int, total: int, symbol: Symbol):
-        if demangle_names:
-            name_demangler.demangle_async(symbol.name)
-        queue.append((index, total, symbol))
-        if len(queue) >= 128:
-            flush_queue()
-
     try:
         with name_demangler:
             search_index(
@@ -408,7 +394,6 @@ def search(_directory, index_path, query, num, format, demangle_names):
                 limit=num,
                 consumer=callback,
             )
-            flush_queue()
     except QueryParser.Error as e:
         error(f"Invalid query: {str(e)}")
         exit(1)
@@ -490,7 +475,7 @@ if have_graphs:
     @click.option(
         "--demangle-names/--no-demangle-names",
         default=True,
-        help="Use c++filt to demangle C++ names and use them as node labels.",
+        help="Demangle C++ names and use them as node labels.",
     )
     @click.option(
         "--json-progress",

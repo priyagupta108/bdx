@@ -114,7 +114,7 @@ def test_cli_search_json_output(fixture_path, index_path):
         "total": 2,
         "path": str(fixture_path / "subdir" / "foo.c.o"),
         "name": "c_function",
-        "demangled": "c_function",
+        "demangled": None,
         "section": ".text",
         "address": 13,
         "size": 13,

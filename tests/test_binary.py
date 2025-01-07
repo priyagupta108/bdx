@@ -46,50 +46,13 @@ def shuffled_int_range(stop):
 
 
 def test_name_demangler():
-    with NameDemangler() as nd:
-        nd.demangle_async("memset")
-        nd.demangle_async("_Z12cxx_functionSt6vectorIiSaIiEE")
-        nd.demangle_async(".text._Z12cxx_functionSt6vectorIiSaIiEE")
-
-        assert (
-            nd.get_demangled_name("_Z12cxx_functionSt6vectorIiSaIiEE")
-            == "cxx_function(std::vector<int, std::allocator<int> >)"
-        )
-
-        assert (
-            nd.get_demangled_name(".text._Z12cxx_functionSt6vectorIiSaIiEE")
-            == ".text._Z12cxx_functionSt6vectorIiSaIiEE"
-        )
-
-        assert nd.get_demangled_name("memset") == "memset"
-
-        assert nd.get_demangled_name("Unknown") == None
-
-
-def test_name_demangler_many_at_once():
-    with NameDemangler() as nd:
-        fmt = "_Z12cxx_func_{i:0>3}v"
-        demangled_fmt = "cxx_func_{i:0>3}()"
-        results = {}
-
-        for j, i in enumerate(shuffled_int_range(500)):
-            mangled = fmt.format(i=i)
-            nd.demangle_async(mangled)
-
-            # Trigger generating new process every N elements
-            if j % 32 == 0:
-                assert nd.get_demangled_name(mangled) is not None
-
-        for i in shuffled_int_range(500):
-            mangled = fmt.format(i=i)
-            demangled = nd.get_demangled_name(mangled)
-
-            results[i] = demangled
-
-        for i in range(500):
-            demangled = demangled_fmt.format(i=i)
-
-            assert results[i] == demangled
+    nd = NameDemangler()
+    assert (
+        nd.demangle("_Z12cxx_functionSt6vectorIiSaIiEE")
+        == "cxx_function(std::vector<int, std::allocator<int> >)"
+    )
+    assert nd.demangle(".text._Z12cxx_functionSt6vectorIiSaIiEE") is None
+    assert nd.demangle("memset") is None
 
 
 def test_find_files(tmp_path):
