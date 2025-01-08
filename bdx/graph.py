@@ -236,7 +236,6 @@ def generate_graph(
     goal_query: str,
     algo: GraphAlgorithm = GraphAlgorithm.ASTAR,
     num_routes: Optional[int] = 1,
-    demangle_names: bool = True,
     on_progress: Callable[[int, int], Any] = lambda x, y: None,
     on_symbol_visited: Callable[[], Any] = lambda: None,
     on_route_found: Callable[[], Any] = lambda: None,
@@ -253,8 +252,6 @@ def generate_graph(
         algo: The algorithm to use.
         num_routes: Exit after finding that many routes
             (if None, generate them infinitely).
-        demangle_names: If True, all nodes will have attribute "label"
-            containing the demangled name.
         on_progress: Progress callback called with (NUM_DONE, NUM_TOTAL) args.
         on_symbol_visited: Called for each symbol visited.
         on_route_found: Called after a single route is found.
@@ -301,8 +298,7 @@ def generate_graph(
             graph.add_node(symbol.name)
             node = graph.get_node(symbol.name)
             attr = node.attr  # pyright: ignore
-            if demangle_names:
-                attr["label"] = symbol.demangle_name()
+            attr["label"] = symbol.demangled or symbol.name
             attr["bdx.path"] = symbol.path
             attr["bdx.address"] = symbol.address
             attr["bdx.section"] = symbol.section

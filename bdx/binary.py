@@ -157,6 +157,7 @@ class Symbol:
     path: Path
     source: Optional[Path]
     name: str
+    demangled: Optional[str]
     section: str
     address: int
     size: int
@@ -166,11 +167,6 @@ class Symbol:
 
     def __lt__(self, other):
         return self.address < other.address
-
-    def demangle_name(self):
-        """Return the demangled name."""
-        with NameDemangler() as nd:
-            return nd.demangle(self.name)
 
 
 class CompilationDatabase:
@@ -298,6 +294,7 @@ def _find_source_file(
 def _read_symbols_in_file(
     file: Path,
     elf: ELFFile,
+    demangle_names: bool,
     min_symbol_size: int,
     use_compilation_database: bool,
     use_dwarfdump: bool,
@@ -314,6 +311,8 @@ def _read_symbols_in_file(
         use_dwarfdump,
     )
 
+    demangler = NameDemangler.instance()
+
     symbols = []
     for symbol in symtab.iter_symbols():
         size = symbol["st_size"]
@@ -324,11 +323,15 @@ def _read_symbols_in_file(
             section = elf.get_section(symbol["st_shndx"]).name
         except Exception:
             section = ""
+
+        demangled = demangler.demangle(symbol.name) if demangle_names else None
+
         symbols.append(
             Symbol(
                 path=Path(file),
                 source=source,
                 name=symbol.name,
+                demangled=demangled,
                 section=section,
                 address=symbol["st_value"],
                 size=size,
@@ -399,6 +402,7 @@ def _read_relocations(elf: ELFFile, symbols: list[Symbol]):
 
 def read_symbols_in_file(
     file: str | Path,
+    demangle_names: bool = True,
     with_relocations: bool = True,
     min_symbol_size=1,
     use_compilation_database: bool = True,
@@ -408,6 +412,8 @@ def read_symbols_in_file(
 
     Args:
         file: The binary file to read.
+        demangle_names: If True, demangle names of each Symbol.
+            Setting this to False can speed up reading.
         with_relocations: If True, populate ``relocations`` of each Symbol.
             Setting this to False can significantly speed up reading.
         min_symbol_size: Only return symbols whose size is greater or equal
@@ -422,6 +428,7 @@ def read_symbols_in_file(
         symbols = _read_symbols_in_file(
             Path(file),
             elf,
+            demangle_names=demangle_names,
             min_symbol_size=min_symbol_size,
             use_compilation_database=use_compilation_database,
             use_dwarfdump=use_dwarfdump,

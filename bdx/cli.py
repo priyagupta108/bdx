@@ -18,8 +18,7 @@ from click.types import BoolParamType, IntRange
 import bdx
 from bdx import debug, error, info, log, make_progress_bar
 # fmt: off
-from bdx.binary import (BinaryDirectory, NameDemangler, Symbol,
-                        find_compilation_database)
+from bdx.binary import BinaryDirectory, Symbol, find_compilation_database
 from bdx.index import (IndexingOptions, SymbolIndex, index_binary_directory,
                        search_index)
 from bdx.query_parser import QueryParser
@@ -194,6 +193,7 @@ class IndexingOptionParamType(click.ParamType):
 
     CONVERTERS = {
         "num_processes": IntRange(min=1, max=(os.cpu_count() or 1) * 2),
+        "demangle_names": BoolParamType(),
         "index_relocations": BoolParamType(),
         "min_symbol_size": IntRange(min=0),
         "use_dwarfdump": BoolParamType(),
@@ -318,16 +318,9 @@ class SearchOutputFormatParamType(click.Choice):
     nargs=1,
     default=None,
 )
-@click.option(
-    "--demangle-names/--no-demangle-names",
-    default=False,
-    help="Make demangled C++ name available as {demangled} format field",
-)
-def search(_directory, index_path, query, num, format, demangle_names):
+def search(_directory, index_path, query, num, format):
     """Search binary directory for symbols."""
     outdated_paths = set()
-
-    name_demangler = NameDemangler()
 
     @lru_cache
     def stat_mtime(path: Path):
@@ -359,8 +352,6 @@ def search(_directory, index_path, query, num, format, demangle_names):
                 **asdict(symbol),
             }.items()
         }
-        if demangle_names:
-            data["demangled"] = name_demangler.demangle(symbol.name)
 
         if format is None:
             fmt = "{basename}: {name}"
@@ -387,13 +378,12 @@ def search(_directory, index_path, query, num, format, demangle_names):
             outdated_paths.add(symbol.path)
 
     try:
-        with name_demangler:
-            search_index(
-                index_path=index_path,
-                query=" ".join(query),
-                limit=num,
-                consumer=callback,
-            )
+        search_index(
+            index_path=index_path,
+            query=" ".join(query),
+            limit=num,
+            consumer=callback,
+        )
     except QueryParser.Error as e:
         error(f"Invalid query: {str(e)}")
         exit(1)
@@ -473,11 +463,6 @@ if have_graphs:
         help="The algorithm to choose",
     )
     @click.option(
-        "--demangle-names/--no-demangle-names",
-        default=True,
-        help="Demangle C++ names and use them as node labels.",
-    )
-    @click.option(
         "--json-progress",
         is_flag=True,
         help=(
@@ -492,7 +477,6 @@ if have_graphs:
         goal_query,
         num_routes,
         algorithm,
-        demangle_names,
         json_progress,
     ):
         """Generate a reference graph in DOT format from two queries.
@@ -569,7 +553,6 @@ if have_graphs:
             goal_query,
             num_routes=num_routes if num_routes else None,
             algo=algorithm,
-            demangle_names=demangle_names,
             on_progress=on_progress,
             on_symbol_visited=on_symbol_visited,
             on_route_found=on_route_found,

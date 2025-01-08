@@ -40,6 +40,7 @@ def test_indexing(fixture_path, tmp_path):
 
         assert top_level_symbol.path == fixture_path / "toplev.c.o"
         assert top_level_symbol.name == "top_level_symbol"
+        assert top_level_symbol.demangled is None
         assert top_level_symbol.section == ".rodata"
         assert top_level_symbol.address == 0
         assert top_level_symbol.size == 64
@@ -49,6 +50,7 @@ def test_indexing(fixture_path, tmp_path):
 
         assert other_top_level_symbol.path == fixture_path / "toplev.c.o"
         assert other_top_level_symbol.name == "other_top_level_symbol"
+        assert other_top_level_symbol.demangled is None
         assert other_top_level_symbol.section == ".data.rel.ro.local"
         assert other_top_level_symbol.address == 0
         assert other_top_level_symbol.size == 8
@@ -64,6 +66,10 @@ def test_indexing(fixture_path, tmp_path):
 
         assert cxx_function.path == fixture_path / "subdir" / "bar.cpp.o"
         assert cxx_function.name == "_Z12cxx_functionSt6vectorIiSaIiEE"
+        assert (
+            cxx_function.demangled
+            == "cxx_function(std::vector<int, std::allocator<int> >)"
+        )
         assert cxx_function.section == ".text"
         assert cxx_function.type == SymbolType.FUNC
         assert cxx_function.relocations == [
@@ -411,17 +417,6 @@ def test_searching_cxx(readonly_index):
     assert sym in readonly_index.search("cxx fu")
     assert sym in readonly_index.search("vector")
     assert sym in readonly_index.search("func vec")
-
-
-def test_demangling(readonly_index):
-    symbols = readonly_index.search("cxx func")
-    by_name = {x.name: x for x in symbols}
-
-    sym = by_name["_Z12cxx_functionSt6vectorIiSaIiEE"]
-    assert (
-        sym.demangle_name()
-        == "cxx_function(std::vector<int, std::allocator<int> >)"
-    )
 
 
 def test_tokenize_symbol():

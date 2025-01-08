@@ -50,6 +50,7 @@ class IndexingOptions:
     """User settings for indexing."""
 
     num_processes: int = os.cpu_count() or 1
+    demangle_names: bool = True
     index_relocations: bool = True
     min_symbol_size: int = 1
     use_dwarfdump: bool = True
@@ -442,6 +443,9 @@ class SymbolIndex:
             PathField("path", "XP", key="path"),
             optional_field(PathField("source", "XSRC", key="source")),
             SymbolNameField("name", "XN", key="name"),
+            optional_field(
+                SymbolNameField("demangled", "XD", key="demangled")
+            ),
             DatabaseField("fullname", "XFN", key="name"),
             DatabaseField("section", "XSN", key="section"),
             IntegerField("address", "XA", slot=0, key="address"),
@@ -748,7 +752,7 @@ class SymbolIndex:
 
         query_parser = QueryParser(
             SymbolIndex.SCHEMA,
-            default_fields=["name"],
+            default_fields=["name", "demangled"],
             auto_wildcard=True,
         )
         return query_parser.parse_query(query)
@@ -814,6 +818,7 @@ def _index_single_file(
     try:
         symtab = read_symbols_in_file(
             file,
+            demangle_names=options.demangle_names,
             with_relocations=options.index_relocations,
             min_symbol_size=options.min_symbol_size,
             use_compilation_database=use_compilation_database,
@@ -849,6 +854,7 @@ def _index_single_file(
                 path=file,
                 source=None,
                 name="",
+                demangled=None,
                 section="",
                 address=0,
                 size=0,

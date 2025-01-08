@@ -95,7 +95,6 @@ def test_cli_search_json_output(fixture_path, index_path):
         index_path,
         "-f",
         "json",
-        "--demangle-names",
         "c",
         "funct",
     )
@@ -142,7 +141,7 @@ def test_cli_search_sexp_output(fixture_path, index_path):
     assert result.exit_code == 0
 
     searchresult = search_directory(
-        runner, index_path, "-f", "sexp", "--demangle-names", "c", "funct"
+        runner, index_path, "-f", "sexp", "c", "funct"
     )
     assert searchresult.exit_code == 0
 
@@ -160,13 +159,13 @@ def test_cli_search_sexp_output(fixture_path, index_path):
         ' :path "XXX/subdir/bar.cpp.o"'
         " :source XXX"
         ' :name "_Z12cxx_functionSt6vectorIiSaIiEE"'
+        ' :demangled "cxx_function(std::vector<int, std::allocator<int> >)"'
         ' :section ".text"'
         " :address 0"
         " :size 24"
         ' :type "FUNC"'
         ' :relocations ("bar" "foo")'
         " :mtime XXX"
-        ' :demangled "cxx_function(std::vector<int, std::allocator<int> >)"'
         ")"
     ) in results
 
