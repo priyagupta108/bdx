@@ -108,7 +108,10 @@ def test_cli_search_json_output(fixture_path, index_path):
         results_by_name[x["name"]] = x
 
     assert results_by_name["c_function"] == {
-        "outdated": False,
+        "outdated": {
+            "symbol": False,
+            "binary": False,
+        },
         "index": 1,
         "total": 2,
         "path": str(fixture_path / "subdir" / "foo.c.o"),
@@ -121,7 +124,10 @@ def test_cli_search_json_output(fixture_path, index_path):
         "relocations": ["foo"],
     }
     assert results_by_name["_Z12cxx_functionSt6vectorIiSaIiEE"] == {
-        "outdated": False,
+        "outdated": {
+            "symbol": False,
+            "binary": False,
+        },
         "index": 0,
         "total": 2,
         "path": str(fixture_path / "subdir" / "bar.cpp.o"),
@@ -153,7 +159,7 @@ def test_cli_search_sexp_output(fixture_path, index_path):
     results = [re.sub(f":source .*? :", ":source XXX :", s) for s in results]
 
     assert (
-        "(:outdated nil"
+        "(:outdated (:binary nil :symbol nil)"
         " :index 0"
         " :total 2"
         ' :path "XXX/subdir/bar.cpp.o"'
