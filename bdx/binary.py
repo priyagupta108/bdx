@@ -13,7 +13,7 @@ from datetime import datetime
 from enum import Enum
 from functools import cache, cached_property, total_ordering
 from pathlib import Path
-from typing import ClassVar, Iterator, Optional
+from typing import ClassVar, Iterable, Iterator, Optional
 
 from elftools.elf.elffile import ELFFile
 from elftools.elf.relocation import Relocation, RelocationSection
@@ -516,15 +516,17 @@ class BinaryDirectory:
 
     def _find_files(self) -> Iterator[Path]:
         if self.use_compilation_database:
-            yield from self._find_files_from_compilation_database()
+            files = self._find_files_from_compilation_database()
         else:
-            for file in self.path.rglob("*.o"):
-                if is_readable_elf_file(file):
-                    yield file
-                else:
-                    trace("{}: Ignoring, Not a readable ELF file", file)
+            files = self.path.rglob("*.o")
 
-    def _find_files_from_compilation_database(self) -> Iterator[Path]:
+        for file in files:
+            if is_readable_elf_file(file):
+                yield file
+            else:
+                trace("{}: Ignoring, not a readable ELF file", file)
+
+    def _find_files_from_compilation_database(self) -> Iterable[Path]:
         path = self.compilation_database
         if not path:
             msg = (
@@ -535,6 +537,4 @@ class BinaryDirectory:
 
         compdb = _read_compdb(path, path.stat().st_mtime_ns)
 
-        for file in compdb.get_all_binary_files():
-            if is_readable_elf_file(file):
-                yield file
+        return compdb.get_all_binary_files()
