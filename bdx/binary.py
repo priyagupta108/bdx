@@ -265,9 +265,10 @@ def _find_source_file_dwarfdump(elf: ELFFile) -> Optional[Path]:
     dw_at_name, dw_at_comp_dir = match.groups()
 
     path = Path(dw_at_comp_dir) / Path(dw_at_name)
-    if path.exists():
+    try:
         return path.resolve()
-    return None
+    except OSError:
+        return path
 
 
 def _find_source_file(

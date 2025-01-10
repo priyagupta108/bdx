@@ -71,6 +71,9 @@ jobs:
           # For generating compile_commands.json file for tests
           sudo apt-get install bear
 
+          # Tests require dwarfdump
+          sudo apt-get install dwarfdump
+
           # Install prerequisites for xapian-bindings.
           # https://github.com/sphinx-doc/sphinx/issues/6524
           pip install Sphinx

@@ -1,4 +1,5 @@
 import shutil
+from pathlib import Path
 from shutil import rmtree
 
 import pytest
@@ -198,12 +199,18 @@ def test_indexing_adds_source_field_with_dwarfdump(fixture_path, tmp_path):
         symbols = list(index.search("path:toplev.c.o"))
         assert symbols
         for symbol in symbols:
-            assert symbol.source == fixture_path / "toplev.c"
+            assert (
+                symbol.source
+                == Path("/src") / "tests" / "fixture" / "toplev.c"
+            )
 
         symbols = list(index.search("path:foo.c.o"))
         assert symbols
         for symbol in symbols:
-            assert symbol.source == fixture_path / "subdir" / "foo.c"
+            assert (
+                symbol.source
+                == Path("/src") / "tests" / "fixture" / "subdir" / "foo.c"
+            )
 
 
 def test_indexing_adds_source_field_with_compilation_database(

@@ -1,3 +1,5 @@
+CFLAGS += "-fdebug-prefix-map=${PWD}=/src"
+
 FILES := \
 	 subdir/bar.cpp \
 	 subdir/foo.c \
@@ -11,12 +13,12 @@ OBJFILES := $(patsubst %,%.o,${FILES})
 %.cpp.o: %.cpp
 	${CXX} ${CFLAGS} -g -c -o $@ $^
 
-compile_commands.json: ${FILES}
-	bear -- ${MAKE} clean default
-
 default: ${OBJFILES}
 
 clean:
 	rm -f ${OBJFILES}
+
+compile_commands.json: ${FILES}
+	bear -- ${MAKE} clean default
 
 .PHONY: default clean
