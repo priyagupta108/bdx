@@ -4,9 +4,7 @@ import json
 import os
 import sys
 import time
-from dataclasses import asdict
-from enum import Enum
-from functools import lru_cache, wraps
+from functools import wraps
 from pathlib import Path
 from sys import exit
 from typing import Any, Optional
@@ -16,9 +14,9 @@ from click.shell_completion import CompletionItem
 from click.types import BoolParamType, IntRange
 
 import bdx
-from bdx import debug, error, info, log, make_progress_bar, trace
+from bdx import debug, error, info, log, make_progress_bar
 # fmt: off
-from bdx.binary import BinaryDirectory, Symbol, find_compilation_database
+from bdx.binary import BinaryDirectory, find_compilation_database
 from bdx.index import (IndexingOptions, SymbolIndex, index_binary_directory,
                        search_index)
 from bdx.query_parser import QueryParser
@@ -320,59 +318,32 @@ class SearchOutputFormatParamType(click.Choice):
 )
 def search(_directory, index_path, query, num, format):
     """Search binary directory for symbols."""
-    outdated_paths_in_index = set()
-    outdated_binaries = set()  # need recompilation for these
+    results = search_index(
+        index_path=index_path, query=" ".join(query), limit=num
+    )
 
-    @lru_cache
-    def stat_mtime(path: Path):
+    if format is None:
+        fmt = "{basename}: {name}"
+    else:
+        fmt = format
+
+    while True:
         try:
-            return path.stat().st_mtime_ns
-        except Exception:
-            return 0
+            res = next(results)
+        except QueryParser.Error as e:
+            error(f"Invalid query: {str(e)}")
+            exit(1)
+        except StopIteration:
+            break
 
-    def is_symbol_outdated(symbol: Symbol):
-        return stat_mtime(symbol.path) != symbol.mtime
-
-    def is_binary_outdated(symbol: Symbol):
-        return symbol.source is not None and stat_mtime(
-            symbol.path
-        ) < stat_mtime(symbol.source)
-
-    def callback(index: int, total: int, symbol: Symbol):
-        def valueconv(v):
-            if isinstance(v, Enum):
-                return v.name
-
-            try:
-                json.dumps(v)
-                return v
-            except Exception:
-                return str(v)
-
-        data = {
-            k: valueconv(v)
-            for k, v in {
-                "outdated": {
-                    "binary": is_binary_outdated(symbol),
-                    "symbol": is_symbol_outdated(symbol),
-                },
-                "index": index,
-                "total": total,
-                **asdict(symbol),
-            }.items()
-        }
-
-        if format is None:
-            fmt = "{basename}: {name}"
-        else:
-            fmt = format
+        data = res.asdict()
 
         if fmt == "json":
             click.echo(json.dumps(data))
         elif fmt == "sexp":
             click.echo(sexp_format(data))
         else:
-            data["basename"] = symbol.path.name
+            data.update(res.dynamic_fields())
 
             try:
                 click.echo(fmt.format(**data))
@@ -382,47 +353,6 @@ def search(_directory, index_path, query, num, format):
                     f"Available keys: {list(data.keys())}"
                 )
                 exit(1)
-
-        if is_symbol_outdated(symbol):
-            outdated_paths_in_index.add(symbol.path)
-
-        if is_binary_outdated(symbol):
-            outdated_binaries.add(symbol.path)
-
-    try:
-        search_index(
-            index_path=index_path,
-            query=" ".join(query),
-            limit=num,
-            consumer=callback,
-        )
-    except QueryParser.Error as e:
-        error(f"Invalid query: {str(e)}")
-        exit(1)
-
-    if outdated_paths_in_index:
-        for file in outdated_paths_in_index:
-            trace("Outdated in index: {}", file)
-
-        log(
-            (
-                "Warning: {} file(s) are newer than index,"
-                " run `index` command to re-index"
-            ),
-            len(outdated_paths_in_index),
-        )
-
-    if outdated_binaries:
-        for file in outdated_binaries:
-            trace("Outdated binary: {}", file)
-
-        log(
-            (
-                "Warning: {} file(s) are older than source,"
-                " re-compile and run `index` command to re-index"
-            ),
-            len(outdated_binaries),
-        )
 
 
 @cli.command()

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import multiprocessing as mp
 import os
 import pickle
@@ -12,6 +13,7 @@ from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from enum import Enum
+from functools import cache
 from pathlib import Path
 from queue import Empty as QueueEmpty
 from queue import Queue
@@ -1050,23 +1052,81 @@ def index_binary_directory(
     return stats
 
 
+@dataclass(frozen=True)
+class SearchResult:
+    """A single symbol retrieved from index."""
+
+    i: int  # Index within all results
+    total: int
+
+    symbol_outdated: bool
+    binary_outdated: bool
+
+    symbol: Symbol
+
+    def asdict(self) -> dict[str, Any]:
+        """Serialize this object to a dict."""
+
+        def valueconv(v):
+            if isinstance(v, Enum):
+                return v.name
+
+            try:
+                json.dumps(v)
+                return v
+            except Exception:
+                return str(v)
+
+        data = asdict(self.symbol)
+
+        return {
+            "outdated": {
+                "binary": self.binary_outdated,
+                "symbol": self.symbol_outdated,
+            },
+            "index": self.i,
+            "total": self.total,
+            **{k: valueconv(v) for k, v in data.items()},
+        }
+
+    def dynamic_fields(self) -> dict[str, Any]:
+        """Return useful additional fields that are set dynamically."""
+        return {
+            "basename": self.symbol.path.name,
+        }
+
+
 def search_index(
     index_path: Path,
     query: str,
-    consumer: Callable[[int, int, Symbol], None],
     limit: Optional[int] = None,
-):
+) -> Iterator[SearchResult]:
     """Search the given index.
 
     Args:
         index_path: The index to search.
         query: The query to search for.
-        consumer: Called for each Symbol found.  The first argument is
-                  the index of the found Symbol within the results;
-                  the second is the total number of results.
         limit: Optional limit of search results.
 
     """
+    outdated_paths_in_index = set()
+    outdated_binaries = set()  # need recompilation for these
+
+    @cache
+    def stat_mtime(path: Path):
+        try:
+            return path.stat().st_mtime_ns
+        except Exception:
+            return 0
+
+    def is_symbol_outdated(symbol: Symbol):
+        return stat_mtime(symbol.path) != symbol.mtime
+
+    def is_binary_outdated(symbol: Symbol):
+        return symbol.source is not None and stat_mtime(
+            symbol.path
+        ) < stat_mtime(symbol.source)
+
     if not query:
         query = "*:*"
 
@@ -1078,4 +1138,41 @@ def search_index(
         debug("Number of results: {}", results.count)
 
         for i, symbol in enumerate(results):
-            consumer(i, results.count, symbol)
+
+            if is_symbol_outdated(symbol):
+                outdated_paths_in_index.add(symbol.path)
+
+            if is_binary_outdated(symbol):
+                outdated_binaries.add(symbol.path)
+
+            yield SearchResult(
+                i=i,
+                total=results.count,
+                symbol_outdated=False,
+                binary_outdated=False,
+                symbol=symbol,
+            )
+
+    if outdated_paths_in_index:
+        for file in outdated_paths_in_index:
+            trace("Outdated in index: {}", file)
+
+        log(
+            (
+                "Warning: {} file(s) are newer than index,"
+                " run `index` command to re-index"
+            ),
+            len(outdated_paths_in_index),
+        )
+
+    if outdated_binaries:
+        for file in outdated_binaries:
+            trace("Outdated binary: {}", file)
+
+        log(
+            (
+                "Warning: {} file(s) are older than source,"
+                " re-compile and run `index` command to re-index"
+            ),
+            len(outdated_binaries),
+        )
