@@ -253,7 +253,13 @@ def cli():
     type=IndexingOptionParamType(),
     help="Set indexing options (key=value).",
 )
-def index(directory, index_path, opt, use_compilation_database):
+@click.option(
+    "-r",
+    "--reindex",
+    is_flag=True,
+    help="Treat all files as outdated to reindex them.",
+)
+def index(directory, index_path, opt, use_compilation_database, reindex):
     """Index the specified directory."""
     options = IndexingOptions(**dict(opt))
 
@@ -263,6 +269,7 @@ def index(directory, index_path, opt, use_compilation_database):
             index_path,
             options=options,
             use_compilation_database=use_compilation_database,
+            reindex=reindex,
         )
     except BinaryDirectory.CompilationDatabaseNotFoundError as e:
         error(str(e))

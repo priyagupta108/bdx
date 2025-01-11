@@ -990,6 +990,7 @@ def index_binary_directory(
     index_path: Path,
     options: IndexingOptions,
     use_compilation_database: bool = False,
+    reindex: bool = False,
 ) -> IndexingStats:
     """Index the given directory."""
     stats = IndexingStats()
@@ -1001,7 +1002,10 @@ def index_binary_directory(
         if index.binary_dir() is None:
             index.set_binary_dir(bindir_path)
 
-        mtime = index.mtime()
+        if reindex:
+            mtime = datetime.fromtimestamp(0)
+        else:
+            mtime = index.mtime()
         existing_files = list(index.all_files())
         bdir = BinaryDirectory(
             bindir_path,
