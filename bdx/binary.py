@@ -21,7 +21,7 @@ from elftools.elf.sections import Symbol as ELFSymbol
 from elftools.elf.sections import SymbolTableSection
 from sortedcontainers import SortedList
 
-from bdx import info, trace
+from bdx import info, make_progress_bar, trace
 
 
 class NameDemangler:
@@ -491,7 +491,11 @@ class BinaryDirectory:
         files = self._file_list
         previous_state = set(self.previous_file_list)
 
-        for path in sorted(files):
+        for path in make_progress_bar(
+            sorted(files),
+            desc="Finding changed files",
+            leave=False,
+        ):
             mtime = datetime.fromtimestamp(path.stat().st_mtime)
             is_new = path not in previous_state
             is_changed = not is_new and self.last_mtime < mtime
@@ -520,6 +524,12 @@ class BinaryDirectory:
             files = self._find_files_from_compilation_database()
         else:
             files = self.path.rglob("*.o")
+            files = make_progress_bar(
+                files,
+                desc="Gathering files by glob",
+                unit="files",
+                leave=False,
+            )
 
         for file in files:
             if is_readable_elf_file(file):

@@ -1023,10 +1023,18 @@ def index_binary_directory(
         stats.num_files_changed = len(changed_files)
         stats.num_files_deleted = len(deleted_files)
 
-        for file in changed_files:
+        for file in make_progress_bar(
+            changed_files,
+            desc="Removing outdated files",
+            leave=False,
+        ):
             index.delete_file(file)
             debug("File modified: {}", file)
-        for file in deleted_files:
+        for file in make_progress_bar(
+            deleted_files,
+            desc="Removing deleted files",
+            leave=False,
+        ):
             index.delete_file(file)
             debug("File deleted: {}", file)
 
