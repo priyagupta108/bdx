@@ -347,10 +347,12 @@ def search(_directory, index_path, query, num, format):
 
             try:
                 click.echo(fmt.format(**data))
-            except (KeyError, ValueError, TypeError):
+            except (KeyError, ValueError, TypeError) as e:
                 error(
-                    f"Invalid format: '{fmt}'\n"
-                    f"Available keys: {list(data.keys())}"
+                    "Invalid format: {} in '{}'\nAvailable keys: {}",
+                    str(e),
+                    fmt,
+                    list(data.keys()),
                 )
                 exit(1)
 
