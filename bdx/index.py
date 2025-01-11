@@ -53,7 +53,7 @@ class IndexingOptions:
 
     num_processes: int = os.cpu_count() or 1
     demangle_names: bool = True
-    index_relocations: bool = True
+    index_relocations: bool = False
     min_symbol_size: int = 1
     use_dwarfdump: bool = True
 

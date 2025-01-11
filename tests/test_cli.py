@@ -21,7 +21,15 @@ def index_directory(
 ) -> Result:
     return runner.invoke(
         cli,
-        ["index", "--index-path", str(index_path), "-d", str(fixture_path)],
+        [
+            "index",
+            "--index-path",
+            str(index_path),
+            "-d",
+            str(fixture_path),
+            "--opt",
+            "index_relocations=True",
+        ],
     )
 
 

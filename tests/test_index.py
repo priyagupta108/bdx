@@ -18,7 +18,9 @@ from bdx.index import (
 
 def test_indexing(fixture_path, tmp_path):
     index_path = tmp_path / "index"
-    index_binary_directory(fixture_path, index_path, IndexingOptions())
+    index_binary_directory(
+        fixture_path, index_path, IndexingOptions(index_relocations=True)
+    )
 
     with SymbolIndex.open(index_path, readonly=True) as index:
         symbols = index.search("*:*")

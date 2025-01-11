@@ -56,17 +56,17 @@ Or you can specify the directory to index:
 The indexer will only index files changed since last run.
 
 The `index` command also accepts `-o`, `--opt` option which can be used to set
-some indexing settings, e.g. to disable indexing relocations:
+some indexing settings, e.g. to enable indexing relocations:
 
-    bdx index -d ./build --opt index_relocations=False
+    bdx index -d ./build --opt index_relocations=True
 
 Available options:
 
 - `num_processes` - number of parallel indexing processes (default=same as # of
   CPUs).
 
-- `index_relocations` - if True (the default), all relocations will be applied
-  and indexed.  Setting this to False can significantly speed up indexing.
+- `index_relocations` - if True, all relocations will be applied and indexed.
+  By default this is false.  Setting this to True will slow down indexing.
 
 - `min_symbol_size` - (default 1) only index symbols with size equal to or
   greater than this.

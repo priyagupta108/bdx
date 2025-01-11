@@ -35,7 +35,13 @@ def chdir():
 @pytest.fixture(scope="session")
 def readonly_index(tmp_path_factory):
     index_path = tmp_path_factory.mktemp(f"index{uuid4()}")
-    index_binary_directory(FIXTURE_PATH, index_path, IndexingOptions())
+    index_binary_directory(
+        FIXTURE_PATH,
+        index_path,
+        IndexingOptions(
+            index_relocations=True,
+        ),
+    )
     with SymbolIndex.open(index_path, readonly=True) as index:
         yield index
 
