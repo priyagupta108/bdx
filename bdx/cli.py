@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import sys
 import time
 from functools import wraps
@@ -14,7 +15,7 @@ from click.shell_completion import CompletionItem
 from click.types import BoolParamType, IntRange
 
 import bdx
-from bdx import debug, error, info, log, make_progress_bar
+from bdx import debug, error, info, log, make_progress_bar, trace
 # fmt: off
 from bdx.binary import BinaryDirectory, find_compilation_database
 from bdx.index import (IndexingOptions, SymbolIndex, index_binary_directory,
@@ -311,7 +312,10 @@ class SearchOutputFormatParamType(click.Choice):
 @click.option(
     "-f",
     "--format",
-    help="Output format (json, sexp, or Python string format)",
+    help=(
+        "Output format (json, sexp, or Python string format). "
+        "'{}'-placeholders are replaced with symbol fields."
+    ),
     type=SearchOutputFormatParamType(),
     nargs=1,
     default=None,
@@ -355,6 +359,69 @@ def search(_directory, index_path, query, num, format):
                     list(data.keys()),
                 )
                 exit(1)
+
+
+@cli.command()
+@_common_options(index_must_exist=True)
+@click.argument(
+    "query",
+    nargs=-1,
+)
+@click.option(
+    "-n",
+    "--num",
+    help="Limit the number of results",
+    type=click.IntRange(1),
+    metavar="LIMIT",
+    default=None,
+)
+@click.option(
+    "-D",
+    "--disassembler",
+    help=(
+        "The command to run to disassemble a symbol. "
+        "'{}'-placeholders are replaced with search keys."
+    ),
+    nargs=1,
+    default=(
+        "objdump -dC "
+        "'{path}' "
+        "--section '{section}' "
+        "--start-address 0x{address:x} --stop-address 0x{endaddress:x}"
+    ),
+)
+def disass(_directory, index_path, query, num, disassembler):
+    """Search binary directory for symbols."""
+    results = search_index(
+        index_path=index_path, query=" ".join(query), limit=num
+    )
+
+    while True:
+        try:
+            res = next(results)
+        except QueryParser.Error as e:
+            error(f"Invalid query: {str(e)}")
+            exit(1)
+        except StopIteration:
+            break
+
+        data = res.asdict()
+        data.update(res.dynamic_fields())
+
+        try:
+            cmd = disassembler.format(**data)
+        except (KeyError, ValueError, TypeError) as e:
+            error(
+                "Invalid format: {} in '{}'\nAvailable keys: {}",
+                str(e),
+                disassembler,
+                list(data.keys()),
+            )
+            exit(1)
+
+        trace("Symbol: {}", res)
+        debug("Running command: {}", cmd)
+        subprocess.check_call(cmd, shell=True)
 
 
 @cli.command()
