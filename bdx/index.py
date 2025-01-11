@@ -1093,6 +1093,7 @@ class SearchResult:
         """Return useful additional fields that are set dynamically."""
         return {
             "basename": self.symbol.path.name,
+            "endaddress": self.symbol.address + self.symbol.size,
         }
 
 

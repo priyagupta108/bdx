@@ -74,26 +74,36 @@ Available options:
   available, to find the source file for a compiled file, if it can't be found
   in any other way.
 
-### Graph generation ###
+### Disassembling ###
 
-Generate an SVG image showing at most 20 routes from symbol `main` in
-`main.o` to all symbols in section `.text` in files matching wildcard
-`Algorithms_*`:
+After a directory is indexed, you can disassemble symbols matching a search
+query.
 
-    bdx graph 'main path:main.o' 'section:".text" AND path:Algorithms*' -n 20 | dot -Tsvg > graph.svg
+You can set the command to disassemble with the `-D`, `--disassembler` option,
+which can contain `{}` placeholders for replacement.
 
-Example graphs: ![ASTAR](./examples/astar.svg) ![BFS](./examples/bfs.svg) ![DFS](./examples/dfs.svg)
+```
+$ bdx disass tree node defp source:./gcc/cp/parser* section:.text
 
-By default this generates paths by using the ASTAR algorithm, the `--algorithm
-BFS` or `--algorithm DFS` options will use
-breadth-first-search/depth-first-search algorithms which can generate different
-graphs and can be slower/faster depending on the index and the queries
-provided.
+/src/gcc-12/build/gcc/cp/parser.o:     file format elf64-x86-64
+
+
+Disassembly of section .text:
+
+000000000000a1d0 <defparse_location(tree_node*)>:
+    a1d0:	48 8b 47 08          	mov    0x8(%rdi),%rax
+    a1d4:	48 8b 10             	mov    (%rax),%rdx
+    a1d7:	48 8b 40 08          	mov    0x8(%rax),%rax
+    a1db:	8b 7a 04             	mov    0x4(%rdx),%edi
+    a1de:	8b 50 04             	mov    0x4(%rax),%edx
+    a1e1:	89 fe                	mov    %edi,%esi
+    a1e3:	e9 00 00 00 00       	jmp    a1e8 <defparse_location(tree_node*)+0x18>
+```
 
 ### Searching ###
 
-`bdx search` command accepts a query string.  A simple query language is
-recognized.
+`bdx search` and other commands accepts a query string.  A simple query
+language is recognized.
 
 ```
 $ bdx search -n 5 tree
@@ -182,6 +192,22 @@ $ bdx search -n 5 -f '0x{address:0>10x}|{section:<10}|{type:8}|{demangled}' tree
 
         bdx search section:.rodata AND size:1000..
 
+
+### Graph generation ###
+
+Generate an SVG image showing at most 20 routes from symbol `main` in
+`main.o` to all symbols in section `.text` in files matching wildcard
+`Algorithms_*`:
+
+    bdx graph 'main path:main.o' 'section:".text" AND path:Algorithms*' -n 20 | dot -Tsvg > graph.svg
+
+Example graphs: ![ASTAR](./examples/astar.svg) ![BFS](./examples/bfs.svg) ![DFS](./examples/dfs.svg)
+
+By default this generates paths by using the ASTAR algorithm, the `--algorithm
+BFS` or `--algorithm DFS` options will use
+breadth-first-search/depth-first-search algorithms which can generate different
+graphs and can be slower/faster depending on the index and the queries
+provided.
 
 ## License ##
 
