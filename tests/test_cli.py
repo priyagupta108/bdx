@@ -1,5 +1,7 @@
 import json
 import re
+import subprocess
+from typing import Optional
 
 import pytest
 
@@ -182,6 +184,37 @@ def test_cli_search_sexp_output(fixture_path, index_path):
         " :mtime XXX"
         ")"
     ) in results
+
+
+def test_cli_disassemble(monkeypatch, fixture_path, index_path):
+    runner = CliRunner()
+    result = index_directory(runner, fixture_path, index_path)
+    assert result.exit_code == 0
+
+    check_call_args: Optional[tuple] = None
+
+    def mock_check_call(*args, **kwargs):
+        nonlocal check_call_args
+
+        check_call_args = (args, kwargs)
+
+    with monkeypatch.context():
+        monkeypatch.setattr(subprocess, "check_call", mock_check_call)
+
+        result = runner.invoke(
+            cli, ["disass", "--index-path", str(index_path), "fullname:main"]
+        )
+
+    assert result.exit_code == 0
+    assert check_call_args is not None
+
+    args, kwargs = check_call_args
+
+    assert args[0].startswith("objdump")
+    assert "--section '.text'" in args[0]
+
+    output = subprocess.check_output(*args, **kwargs, text=True)
+    assert re.search("push[ ]+%rbp", output)
 
 
 def test_cli_file_list(fixture_path, index_path):
