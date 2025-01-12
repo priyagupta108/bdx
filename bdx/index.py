@@ -98,6 +98,13 @@ class DatabaseField:
         """
         value = self.preprocess_value(value).decode()
         term = f"{self.prefix}{value}"
+        if len(term) > MAX_TERM_SIZE:
+            msg = (
+                f"Term for '{self.name}' field is too long, max size "
+                f"is {MAX_TERM_SIZE-len(self.prefix)}: '{value[:30]}'..."
+            )
+            raise ValueError(msg)
+
         if wildcard:
             return xapian.Query(
                 xapian.Query.OP_WILDCARD,

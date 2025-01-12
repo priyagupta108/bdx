@@ -12,6 +12,7 @@ from bdx.index import (
     SymbolNameField,
     index_binary_directory,
 )
+from bdx.query_parser import QueryParser
 
 # isort: on
 
@@ -413,6 +414,11 @@ def test_searching_by_basename(fixture_path, readonly_index):
         assert sym.path == fixture_path / "subdir" / "bar.cpp.o"
     for sym in all_symbols.difference(bar_symbols):
         assert sym.path != fixture_path / "subdir" / "bar.cpp.o"
+
+
+def test_searching_long_name(fixture_path, readonly_index):
+    with pytest.raises(QueryParser.Error, match="'name'.*too long"):
+        readonly_index.search("a" * 300)
 
 
 def test_searching_cxx(readonly_index):
