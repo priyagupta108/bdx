@@ -6,26 +6,23 @@ on:
 
 jobs:
   build:
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
 
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, Ubuntu-22.04, ubuntu-20.04]
         python-version:
-          - "3.8"
           - "3.9"
           - "3.10"
           - "3.11"
           - "3.12"
           - "3.13"
 
-
     steps:
       - uses: actions/checkout@v4
 
       - name: Set up python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@master
         with:
           python-version: ${{ matrix.python-version }}
 
@@ -38,7 +35,6 @@ jobs:
           wget https://oligarchy.co.uk/xapian/$VERSION/xapian-bindings-$VERSION.tar.xz
           tar -C /usr/local/src/xapian --strip-components=1 -xvaf xapian-core*.tar.xz
           tar -C /usr/local/src/xapian-bindings --strip-components=1 -xvaf xapian-bindings*.tar.xz
-
       - name: Cache xapian
         id: cache-xapian
         uses: actions/cache@v4
@@ -60,62 +56,47 @@ jobs:
             sudo sed -i '/^deb/P;s/^deb/deb-src/' /etc/apt/sources.list
           # Ubuntu>=24
           sudo sed -i 's/^Types: deb/Types: deb deb-src/' /etc/apt/sources.list.d/*
-
           sudo apt-get update
           sudo apt-get install build-essential
-
           # Xapian deps
           sudo apt-get install zlib1g-dev uuid-dev
           sudo apt-get build-dep libxapian-dev
-
           # Pygraphviz
           sudo apt-get install graphviz-dev
-
           # For generating compile_commands.json file for tests
           sudo apt-get install bear
-
-          # Tests require dwarfdump
-          sudo apt-get install dwarfdump
-
           # Install prerequisites for xapian-bindings.
           # https://github.com/sphinx-doc/sphinx/issues/6524
           pip install Sphinx
-
-      # - name: Build xapian
-      #   if: steps.cache-xapian.outputs.cache-hit != 'true'
-      #   run: |
-      #     cd /usr/local/src/xapian
-      #     mkdir build
-      #     cd build
-      #     ../configure --prefix=/usr
-      #     make -j 12
-
+      - name: Build xapian
+        if: steps.cache-xapian.outputs.cache-hit != 'true'
+        run: |
+          cd /usr/local/src/xapian
+          mkdir build
+          cd build
+          ../configure --prefix=/usr
+          make -j 12
       - name: Install xapian
         run: |
           cd /usr/local/src/xapian/build/
           sudo make install
-
-      # - name: Build xapian bindings
-      #   if: steps.cache-xapian-bindings.outputs.cache-hit != 'true'
-      #   run: |
-      #     cd /usr/local/src/xapian-bindings
-      #     mkdir build
-      #     cd build
-      #     ../configure --with-python3 --prefix=/usr
-      #     make -j 12
-
+      - name: Build xapian bindings
+        if: steps.cache-xapian-bindings.outputs.cache-hit != 'true'
+        run: |
+          cd /usr/local/src/xapian-bindings
+          mkdir build
+          cd build
+          ../configure --with-python3 --prefix=/usr
+          make -j 12
       - name: Install xapian bindings
         run: |
           cd /usr/local/src/xapian-bindings/build/
           sudo make install
-
       - name: Install the project
         run: |
           pip install -e .[dev,graphs]
-
           make -C tests/fixture compile_commands.json
           git restore tests/fixture # Restore the committed .o files
-
       - name: Lint
         run: make lint
 
