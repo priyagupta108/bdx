@@ -61,7 +61,7 @@ jobs:
           sudo sed -i 's/^Types: deb/Types: deb deb-src/' /etc/apt/sources.list.d/*
 
           sudo apt-get update
-          sudo apt-get install build-essential
+          sudo apt-get install build-essential zlib1g-dev uuid-dev
 
           # Xapian deps
           sudo apt-get install zlib1g-dev uuid-dev
