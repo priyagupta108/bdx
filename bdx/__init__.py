@@ -22,6 +22,7 @@ def log(msg, *args):
 
         def prettify_arg(arg):
             print(f"Processing argument: {arg}")  
+            
             if isinstance(arg, Path) and arg.is_absolute():
                 return os.path.relpath(arg)
 
