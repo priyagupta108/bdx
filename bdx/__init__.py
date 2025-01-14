@@ -16,10 +16,12 @@ _lock = Lock()
 
 def log(msg, *args):
     """Print ``msg`` to stderr."""
+    
     try:
         pid = os.getpid()
 
         def prettify_arg(arg):
+            print(f"Processing argument: {arg}")  
             if isinstance(arg, Path) and arg.is_absolute():
                 return os.path.relpath(arg)
 
