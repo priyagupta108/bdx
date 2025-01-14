@@ -20,11 +20,12 @@ jobs:
           - "3.12"
           - "3.13"
 
+
     steps:
       - uses: actions/checkout@v4
 
       - name: Set up python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@master
         with:
           python-version: ${{ matrix.python-version }}
 
@@ -61,7 +62,7 @@ jobs:
           sudo sed -i 's/^Types: deb/Types: deb deb-src/' /etc/apt/sources.list.d/*
 
           sudo apt-get update
-          sudo apt-get install build-essential zlib1g-dev uuid-dev
+          sudo apt-get install build-essential
 
           # Xapian deps
           sudo apt-get install zlib1g-dev uuid-dev
