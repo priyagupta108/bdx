@@ -81,28 +81,28 @@ jobs:
           # https://github.com/sphinx-doc/sphinx/issues/6524
           pip install Sphinx
 
-      - name: Build xapian
-        if: steps.cache-xapian.outputs.cache-hit != 'true'
-        run: |
-          cd /usr/local/src/xapian
-          mkdir build
-          cd build
-          ../configure --prefix=/usr
-          make -j 12
+      # - name: Build xapian
+      #   if: steps.cache-xapian.outputs.cache-hit != 'true'
+      #   run: |
+      #     cd /usr/local/src/xapian
+      #     mkdir build
+      #     cd build
+      #     ../configure --prefix=/usr
+      #     make -j 12
 
       - name: Install xapian
         run: |
           cd /usr/local/src/xapian/build/
           sudo make install
 
-      - name: Build xapian bindings
-        if: steps.cache-xapian-bindings.outputs.cache-hit != 'true'
-        run: |
-          cd /usr/local/src/xapian-bindings
-          mkdir build
-          cd build
-          ../configure --with-python3 --prefix=/usr
-          make -j 12
+      # - name: Build xapian bindings
+      #   if: steps.cache-xapian-bindings.outputs.cache-hit != 'true'
+      #   run: |
+      #     cd /usr/local/src/xapian-bindings
+      #     mkdir build
+      #     cd build
+      #     ../configure --with-python3 --prefix=/usr
+      #     make -j 12
 
       - name: Install xapian bindings
         run: |
