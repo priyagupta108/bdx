@@ -57,8 +57,8 @@ jobs:
           # Ubuntu<24
           test -e /etc/apt/sources.list && \
             sudo sed -i '/^deb/P;s/^deb/deb-src/' /etc/apt/sources.list
-          # Ubuntu>=24
-          sudo sed -i 's/^Types: deb/Types: deb deb-src/' /etc/apt/sources.list.d/*
+          # # Ubuntu>=24
+          # sudo sed -i 's/^Types: deb/Types: deb deb-src/' /etc/apt/sources.list.d/*
 
           sudo apt-get update
           sudo apt-get install build-essential
