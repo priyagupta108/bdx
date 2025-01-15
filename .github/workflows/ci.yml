@@ -64,8 +64,10 @@ jobs:
           sudo apt-get install zlib1g-dev uuid-dev
           sudo apt-get build-dep libxapian-dev
 
-          # Python development headers
-          sudo apt-get install python${{ matrix.python-version }}-dev
+         
+           # Python development headers
+           sudo apt-get install python${{ matrix.python-version }}-dev || sudo apt-get install python${{ matrix.python-version }}-venv
+
 
           # Pygraphviz
           sudo apt-get install graphviz-dev
