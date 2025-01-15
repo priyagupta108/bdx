@@ -58,6 +58,9 @@ jobs:
           sudo sed -i 's/^Types: deb/Types: deb deb-src/' /etc/apt/sources.list.d/*
           sudo apt-get update
           sudo apt-get install build-essential
+          # Python development headers
+           sudo apt-get install python${{ matrix.python-version }}-dev
+
           # Xapian deps
           sudo apt-get install zlib1g-dev uuid-dev
           sudo apt-get build-dep libxapian-dev
