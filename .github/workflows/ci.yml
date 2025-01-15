@@ -65,8 +65,8 @@ jobs:
           sudo apt-get build-dep libxapian-dev
 
          
-           # Python development headers
-           sudo apt-get install python${{ matrix.python-version }}-dev || sudo apt-get install python${{ matrix.python-version }}-venv
+          # Python development headers
+           sudo apt-get install python3-dev python3-venv
 
 
           # Pygraphviz
